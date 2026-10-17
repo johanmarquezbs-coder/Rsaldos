@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.RSaldos" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/rs_orange</item>
+        <item name="colorOnPrimary">@color/rs_white</item>
+        <item name="colorPrimaryContainer">@color/rs_orange_soft</item>
+        <item name="colorOnPrimaryContainer">@color/rs_orange_dark</item>
+        <item name="colorSecondary">@color/rs_graphite</item>
+        <item name="colorOnSecondary">@color/rs_white</item>
+        <item name="colorSecondaryContainer">@color/rs_orange_soft</item>
+        <item name="colorError">@color/rs_red</item>
+        <item name="colorSurface">@color/rs_white</item>
+        <item name="colorOnSurface">@color/rs_graphite</item>
+        <item name="android:colorBackground">@color/rs_gray_light</item>
+        <item name="android:statusBarColor">@color/rs_white</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:navigationBarColor">@color/rs_white</item>
+        <item name="materialButtonStyle">@style/Widget.RSaldos.Button.Primary</item>
+        <item name="textInputStyle">@style/Widget.RSaldos.TextInput</item>
+        <item name="materialCardViewStyle">@style/Widget.RSaldos.Card</item>
+        <item name="chipStyle">@style/Widget.RSaldos.Chip</item>
+        <item name="toolbarStyle">@style/Widget.RSaldos.Toolbar</item>
+    </style>
+
+    <style name="Theme.RSaldos.Splash" parent="Theme.RSaldos">
+        <item name="android:windowBackground">@drawable/bg_splash</item>
+        <item name="android:statusBarColor">@color/rs_orange</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:navigationBarColor">@color/rs_orange</item>
+    </style>
+</resources>

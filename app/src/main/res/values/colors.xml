@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="rs_orange">#F26B1D</color>
+    <color name="rs_orange_dark">#D85A10</color>
+    <color name="rs_orange_soft">#FFF1E8</color>
+    <color name="rs_graphite">#1E2227</color>
+    <color name="rs_graphite_soft">#3A4048</color>
+    <color name="rs_gray_light">#F4F5F7</color>
+    <color name="rs_gray_line">#E3E5E9</color>
+    <color name="rs_gray_text">#6B7280</color>
+    <color name="rs_white">#FFFFFF</color>
+    <color name="rs_green">#1E9E5A</color>
+    <color name="rs_green_soft">#E5F6EC</color>
+    <color name="rs_red">#D93838</color>
+    <color name="rs_red_soft">#FDECEC</color>
+    <color name="rs_blue">#2F6FDE</color>
+    <color name="rs_blue_soft">#E8F0FD</color>
+    <color name="rs_yellow">#C98A06</color>
+    <color name="rs_yellow_soft">#FFF6DB</color>
+    <color name="rs_purple">#7C4DCC</color>
+    <color name="rs_teal">#1F8A8A</color>
+</resources>
