@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <group android:id="@+id/group_main" android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_seller_dashboard"
+            android:icon="@drawable/ic_chart"
+            android:title="@string/nav_dashboard" />
+        <item
+            android:id="@+id/nav_seller_products"
+            android:icon="@drawable/ic_inventory"
+            android:title="@string/nav_products" />
+        <item
+            android:id="@+id/nav_seller_new"
+            android:icon="@drawable/ic_add"
+            android:title="@string/nav_new_product" />
+        <item
+            android:id="@+id/nav_seller_orders"
+            android:icon="@drawable/ic_truck"
+            android:title="@string/nav_seller_orders" />
+        <item
+            android:id="@+id/nav_profile"
+            android:icon="@drawable/ic_person"
+            android:title="@string/nav_seller_profile" />
+    </group>
+    <group android:id="@+id/group_session">
+        <item
+            android:id="@+id/nav_help"
+            android:icon="@drawable/ic_shield"
+            android:title="@string/nav_help" />
+        <item
+            android:id="@+id/nav_logout"
+            android:icon="@drawable/ic_logout"
+            android:title="@string/nav_logout" />
+    </group>
+</menu>
