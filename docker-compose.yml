@@ -1,0 +1,10 @@
+services:
+  apk:
+    build:
+      context: .
+      target: web
+    image: rsaldos-apk:1.0.0
+    container_name: rsaldos-apk
+    ports:
+      - "8080:80"
+    restart: unless-stopped
