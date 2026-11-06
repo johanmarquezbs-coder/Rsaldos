@@ -8,3 +8,25 @@ services:
     ports:
       - "8080:80"
     restart: unless-stopped
+
+  emulador:
+    image: budtmo/docker-android:emulator_14.0
+    container_name: rsaldos-emulador
+    devices:
+      - /dev/kvm
+    environment:
+      EMULATOR_DEVICE: "Samsung Galaxy S10"
+      WEB_VNC: "true"
+    ports:
+      - "6080:6080"
+    restart: unless-stopped
+
+  instalador:
+    build:
+      context: .
+      target: instalador
+    image: rsaldos-instalador:1.0.0
+    container_name: rsaldos-instalador
+    depends_on:
+      - emulador
+    restart: "no"
