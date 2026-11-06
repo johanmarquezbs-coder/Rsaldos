@@ -98,7 +98,7 @@
         <item name="android:textStyle">bold</item>
     </style>
 
-    <style name="RSaldos.Badge">
+    <style name="RSaldos.Badge" parent="">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:paddingStart">8dp</item>
@@ -110,7 +110,7 @@
         <item name="android:background">@drawable/bg_badge</item>
     </style>
 
-    <style name="RSaldos.SectionTitle">
+    <style name="RSaldos.SectionTitle" parent="">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">@dimen/space_l</item>
