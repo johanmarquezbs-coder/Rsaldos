@@ -51,4 +51,4 @@ COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker/index.html /usr/share/nginx/html/index.html
 COPY --from=build /out/rsaldos-debug.apk /usr/share/nginx/html/rsaldos.apk
 EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://127.0.0.1/health || exit 1

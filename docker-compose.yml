@@ -6,12 +6,13 @@ services:
     image: rsaldos-apk:1.0.0
     container_name: rsaldos-apk
     ports:
-      - "8080:80"
+      - "8095:80"
     restart: unless-stopped
 
   emulador:
     image: budtmo/docker-android:emulator_14.0
     container_name: rsaldos-emulador
+    profiles: ["emulador"]
     devices:
       - /dev/kvm
     environment:
@@ -27,6 +28,7 @@ services:
       target: instalador
     image: rsaldos-instalador:1.0.0
     container_name: rsaldos-instalador
+    profiles: ["emulador"]
     depends_on:
       - emulador
     restart: "no"
