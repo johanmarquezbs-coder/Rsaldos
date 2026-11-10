@@ -60,6 +60,14 @@ Abre http://localhost:8095 para descargar el APK. Para sacar solo el archivo:
 docker build --target export --output dist .
 ```
 
+**Emulador en Windows** (con Docker arriba):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\emulador.ps1
+```
+
+La primera vez instala el SDK, el emulador y un dispositivo `RSaldos` con Android 14. Después abre el emulador, instala el APK que publica Docker y abre la app. Si aparece "System UI isn't responding", tocar **Wait**.
+
 ## Estructura
 
 ```
