@@ -60,13 +60,29 @@ Abre http://localhost:8095 para descargar el APK. Para sacar solo el archivo:
 docker build --target export --output dist .
 ```
 
-**Emulador en Windows** (con Docker arriba):
+**Compilar y abrir en el emulador (Windows, sin Android Studio):**
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\emulador.ps1
 ```
 
-La primera vez instala el SDK, el emulador y un dispositivo `RSaldos` con Android 14. Después abre el emulador, instala el APK que publica Docker y abre la app. Si aparece "System UI isn't responding", tocar **Wait**.
+El script hace todo en orden:
+
+1. Descarga el JDK 17 y el SDK de Android en `%LOCALAPPDATA%\Android` si no están instalados.
+2. Compila la app con `gradlew assembleDebug`.
+3. Crea el dispositivo `RSaldos` (Pixel 6, Android 14) si no existe.
+4. Abre el emulador, instala el APK y abre R-Saldos.
+
+La primera vez tarda varios minutos por las descargas. Para solo compilar el APK:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\emulador.ps1 -SoloCompilar
+```
+
+Si el emulador no abre:
+
+- Verificar la aceleración: `& "$env:LOCALAPPDATA\Android\Sdk\emulator\emulator-check.exe" accel` debe decir que WHPX está disponible. Si no, activar "Plataforma del hipervisor de Windows" en Características de Windows y reiniciar.
+- Si aparece "System UI isn't responding", tocar **Wait**.
 
 ## Estructura
 
