@@ -62,6 +62,8 @@ docker build --target export --output dist .
 
 **Compilar y abrir en el emulador (Windows, sin Android Studio):**
 
+El emulador corre como ventana de Windows, no dentro de Docker: Docker Desktop no expone la virtualización que necesita Android.
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\emulador.ps1
 ```

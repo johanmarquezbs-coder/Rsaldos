@@ -40,10 +40,6 @@ RUN gradle --no-daemon assembleDebug \
 FROM scratch AS export
 COPY --from=build /out/ /
 
-FROM build AS instalador
-COPY docker/instalar.sh /instalar.sh
-CMD ["sh", "/instalar.sh"]
-
 FROM nginx:1.27-alpine AS web
 LABEL org.opencontainers.image.title="R-Saldos APK" \
       org.opencontainers.image.description="Página de descarga del APK de la tienda virtual R-Saldos"
