@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Carpeta de caché donde la cámara guarda temporalmente las fotos antes de subirlas a Firebase Storage. -->
+<!-- Carpeta de caché donde la cámara guarda temporalmente las fotos antes de comprimirlas y guardarlas en Firestore. -->
 <paths>
     <cache-path name="camera" path="camera/" />
 </paths>

@@ -93,8 +93,8 @@ enum class ProductStatus(val label: String, @ColorRes val color: Int, @ColorRes 
 /**
  * Producto guardado en `products/{id}`.
  *
- * Las fotos se suben a Firebase Storage (`products/{id}/...jpg`) y aquí solo se guardan sus
- * URL de descarga en [photoUrls].
+ * Las fotos se guardan comprimidas en Firestore (`productPhotos/{id}`) y aquí solo se guardan
+ * sus referencias `firestore://productPhotos/{id}` en [photoUrls].
  */
 data class Product(
     val id: String,

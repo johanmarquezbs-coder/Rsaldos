@@ -64,6 +64,17 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Fotos de producto en Base64 (Firestore sustituye a Storage en el plan gratuito Spark).
+    // Cada documento debe pesar menos de 1 MiB.
+    match /productPhotos/{photoId} {
+      allow read: if signedIn();
+      allow create: if isActive() && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000
+        && request.resource.data.mimeType == 'image/jpeg';
+      allow delete: if isActive();
+      allow update: if false;
+    }
+
     // Bitácora de auditoría: se escribe pero no se edita ni se borra; solo el admin la lee.
     match /audit/{eventId} {
       allow create: if signedIn() && request.resource.data.actorId == request.auth.uid;

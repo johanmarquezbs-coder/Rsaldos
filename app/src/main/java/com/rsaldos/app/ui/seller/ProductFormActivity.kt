@@ -38,7 +38,7 @@ import java.io.File
  *
  * Las fotos se toman con la cámara (a resolución completa, mediante un FileProvider) o se
  * eligen de la galería con el selector de fotos del sistema. Al guardar, las fotos nuevas se
- * suben a Firebase Storage y el producto se escribe en Firestore con sus URL. Mantener
+ * comprimen y se guardan en Firestore (colección productPhotos) y el producto guarda sus referencias. Mantener
  * presionada una miniatura la quita del producto.
  */
 class ProductFormActivity : AppCompatActivity() {
@@ -47,7 +47,7 @@ class ProductFormActivity : AppCompatActivity() {
     private var editing: Product? = null
     private lateinit var productId: String
 
-    /** Foto del formulario: ya subida a Storage (remota) o tomada/elegida y pendiente de subir (local). */
+    /** Foto del formulario: ya guardada en Firestore (remota) o tomada/elegida y pendiente de subir (local). */
     private sealed class Photo {
         data class Remote(val url: String) : Photo()
         data class Local(val uri: Uri) : Photo()
@@ -217,8 +217,8 @@ class ProductFormActivity : AppCompatActivity() {
     private fun text(view: com.google.android.material.textfield.TextInputEditText) = view.text?.toString()?.trim().orEmpty()
 
     /**
-     * Valida el formulario, sube a Storage las fotos nuevas, guarda el producto en Firestore y
-     * borra de Storage las fotos que el usuario quitó.
+     * Valida el formulario, guarda en Firestore las fotos nuevas, guarda el producto en Firestore y
+     * borra las fotos que el usuario quitó.
      */
     private fun save() {
         val fields = listOf(binding.tilTitle, binding.tilBrand, binding.tilCategory, binding.tilCondition, binding.tilPrice,

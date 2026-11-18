@@ -180,7 +180,7 @@ fun android.widget.LinearLayout.addRow(
 }
 
 /**
- * Carga una foto del producto desde Firebase Storage con Coil, ocupando todo el recuadro.
+ * Carga una foto del producto guardada en Firestore con Coil, ocupando todo el recuadro.
  * Si el producto no tiene fotos, muestra el ícono de la categoría con su tamaño y tinte
  * originales (el tamaño se recuerda en un tag para que funcione al reciclar filas).
  */

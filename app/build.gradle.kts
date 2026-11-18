@@ -1,7 +1,7 @@
 /**
  * Construcción del módulo :app de R-Saldos.
  *
- * - Firebase (Authentication, Firestore y Storage) se configura con el archivo
+ * - Firebase (Authentication y Firestore) se configura con el archivo
  *   app/google-services.json que se descarga desde la consola de Firebase.
  * - La llave pública de ePayco y el modo de pruebas se leen de gradle.properties
  *   y se exponen en BuildConfig para no dejarlos quemados en el código.
@@ -69,17 +69,16 @@ dependencies {
     implementation("androidx.security:security-crypto:1.0.0")
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
-    // Firebase: autenticación, base de datos Firestore y almacenamiento de imágenes.
+    // Firebase: autenticación y base de datos Firestore (incluye las fotos de producto).
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
     implementation("com.google.firebase:firebase-auth-ktx")
     implementation("com.google.firebase:firebase-firestore-ktx")
-    implementation("com.google.firebase:firebase-storage-ktx")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     // Google Play Services: ubicación del dispositivo (Fused Location Provider).
     implementation("com.google.android.gms:play-services-location:21.3.0")
 
-    // Carga de imágenes desde Firebase Storage.
+    // Carga y caché de imágenes (fotos de producto desde Firestore).
     implementation("io.coil-kt:coil:2.6.0")
 }

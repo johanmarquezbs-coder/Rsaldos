@@ -259,7 +259,7 @@ object Repository {
     // Productos (CRUD del vendedor y del administrador)
     // ---------------------------------------------------------------------------------------
 
-    /** Genera un id de documento nuevo para un producto (se usa también como carpeta en Storage). */
+    /** Genera un id de documento nuevo para un producto (se usa también como prefijo de sus fotos). */
     fun newProductId(): String = db.collection(PRODUCTS).document().id
 
     /** Busca un producto en la caché. */
@@ -317,7 +317,7 @@ object Repository {
         return saved
     }
 
-    /** Elimina el producto de Firestore, sus fotos de Storage y lo saca del carrito propio. */
+    /** Elimina el producto de Firestore, sus fotos y lo saca del carrito propio. */
     fun deleteProduct(actor: User, product: Product) {
         products.removeAll { it.id == product.id }
         db.collection(PRODUCTS).document(product.id).delete()
