@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ids auxiliares: guarda el tamaño original del ícono de producto antes de mostrar una foto. -->
+<resources>
+    <item name="tag_icon_size" type="id" />
+</resources>

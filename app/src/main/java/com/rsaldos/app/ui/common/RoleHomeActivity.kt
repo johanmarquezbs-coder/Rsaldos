@@ -14,20 +14,45 @@ import com.rsaldos.app.data.AuditType
 import com.rsaldos.app.data.Repository
 import com.rsaldos.app.data.SessionManager
 import com.rsaldos.app.data.User
+import com.rsaldos.app.data.UserStatus
 import com.rsaldos.app.databinding.ActivityRoleHomeBinding
 import com.rsaldos.app.databinding.NavHeaderBinding
 
+/**
+ * Pantalla base de cada rol (Comprador, Vendedor y Administrador).
+ *
+ * Arma el menú lateral (DrawerLayout) y la barra inferior (BottomNavigationView) del rol,
+ * cambia de fragmento según la opción elegida y escucha los cambios del [Repository] para
+ * refrescar el fragmento visible cuando llegan datos nuevos desde Firestore. Si el
+ * administrador bloquea o elimina la cuenta mientras está abierta, cierra la sesión.
+ */
 abstract class RoleHomeActivity : AppCompatActivity() {
     protected lateinit var binding: ActivityRoleHomeBinding
     lateinit var session: SessionManager
-    lateinit var user: User
+    private lateinit var initialUser: User
+
+    /** Perfil vigente del usuario (se actualiza en tiempo real desde Firestore). */
+    val user: User get() = Repository.me ?: initialUser
+
+    /** Observador que refresca el fragmento actual y la insignia del carrito. */
+    private val dataObserver: () -> Unit = {
+        if (::binding.isInitialized) {
+            (supportFragmentManager.findFragmentById(R.id.fragmentContainer) as? Refreshable)?.let { fragment ->
+                if ((fragment as Fragment).isResumed) fragment.refresh()
+            }
+            updateCartBadge()
+            bindHeader()
+        }
+    }
 
     @get:MenuRes protected abstract val bottomMenu: Int
     @get:MenuRes protected abstract val drawerMenu: Int
     @get:IdRes protected abstract val startDestination: Int
 
+    /** Devuelve el fragmento que corresponde a una opción del menú, o null si no aplica. */
     protected abstract fun fragmentFor(@IdRes itemId: Int): Fragment?
 
+    /** Permite a cada rol atender opciones del menú lateral que abren otra actividad. */
     protected open fun onDrawerAction(@IdRes itemId: Int): Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,11 +60,11 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         session = SessionManager(this)
         val current = session.currentUser()
         if (current == null) {
-            Navigator.openLogin(this)
+            Navigator.restart(this)
             finish()
             return
         }
-        user = current
+        initialUser = current
 
         binding = ActivityRoleHomeBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -87,11 +112,33 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         })
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (!::binding.isInitialized) return
+        Repository.addObserver(dataObserver)
+        Repository.onSessionRevoked = { status -> onRevoked(status) }
+    }
+
+    override fun onStop() {
+        Repository.removeObserver(dataObserver)
+        Repository.onSessionRevoked = null
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::binding.isInitialized) updateCartBadge()
     }
 
+    /** Cierra la sesión cuando el administrador bloquea o elimina la cuenta. */
+    private fun onRevoked(status: UserStatus) {
+        toast(getString(if (status == UserStatus.BLOCKED) R.string.error_blocked else R.string.session_revoked))
+        session.logout()
+        Navigator.openLogin(this)
+        finish()
+    }
+
+    /** Muestra nombre, correo y rol en la cabecera del menú lateral. */
     private fun bindHeader() {
         val header = NavHeaderBinding.bind(binding.navView.getHeaderView(0))
         header.tvHeaderAvatar.text = user.initials
@@ -101,6 +148,7 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         header.tvHeaderRole.badge(user.role.label, R.color.rs_orange_dark, R.color.rs_white)
     }
 
+    /** Navega a una opción del menú (de la barra inferior o del menú lateral). */
     fun navigateTo(@IdRes itemId: Int) {
         if (binding.bottomNav.menu.findItem(itemId) != null) {
             binding.bottomNav.selectedItemId = itemId
@@ -109,6 +157,7 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         }
     }
 
+    /** Reemplaza el fragmento visible y actualiza el título de la barra superior. */
     private fun show(@IdRes itemId: Int) {
         val fragment = fragmentFor(itemId) ?: return
         supportFragmentManager.beginTransaction()
@@ -120,8 +169,10 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         binding.navView.setCheckedItem(itemId)
     }
 
+    /** Título de una opción del menú. */
     private fun findTitle(menu: Menu, itemId: Int): CharSequence? = menu.findItem(itemId)?.title
 
+    /** Muestra en la barra inferior cuántas unidades hay en el carrito. */
     fun updateCartBadge() {
         if (binding.bottomNav.menu.findItem(R.id.nav_cart) == null) return
         val count = Repository.cartCount()
@@ -132,6 +183,7 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         badge.number = count
     }
 
+    /** Pide confirmación, registra el cierre en la auditoría y cierra la sesión de Firebase. */
     fun confirmLogout() {
         confirm(getString(R.string.logout_title), getString(R.string.logout_message), getString(R.string.nav_logout)) {
             Repository.log(user.name, "Cierre de sesión", "Rol ${user.role.label}", AuditType.SECURITY)
@@ -141,6 +193,7 @@ abstract class RoleHomeActivity : AppCompatActivity() {
         }
     }
 
+    /** Diálogo de ayuda general. */
     private fun showHelp() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.help_title)

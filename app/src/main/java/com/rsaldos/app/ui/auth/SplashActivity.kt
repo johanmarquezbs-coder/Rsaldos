@@ -3,17 +3,27 @@ package com.rsaldos.app.ui.auth
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.appcompat.app.AppCompatActivity
-import com.rsaldos.app.data.SessionManager
+import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.rsaldos.app.R
+import com.rsaldos.app.data.AuthService
+import com.rsaldos.app.data.Repository
 import com.rsaldos.app.databinding.ActivitySplashBinding
 import com.rsaldos.app.ui.common.Navigator
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
+/**
+ * Pantalla de bienvenida con la marca animada.
+ *
+ * Mientras corre la animación verifica que Firebase esté configurado y restaura la sesión
+ * guardada por Firebase Authentication: si hay una cuenta activa abre su pantalla de rol;
+ * si no, abre el inicio de sesión.
+ */
 @SuppressLint("CustomSplashScreen")
 class SplashActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySplashBinding
-    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,25 +37,36 @@ class SplashActivity : AppCompatActivity() {
         binding.tvBrand.alpha = 0f
         binding.tvBrand.animate().alpha(1f).setStartDelay(300).setDuration(600).start()
 
-        handler.postDelayed({ goNext() }, SPLASH_MS)
-    }
-
-    private fun goNext() {
-        val user = SessionManager(this).currentUser()
-        if (user != null) {
-            Navigator.openHome(this, user)
-        } else {
-            startActivity(Intent(this, LoginActivity::class.java))
+        if (!Repository.isFirebaseReady(this)) {
+            showMissingFirebase()
+            return
         }
-        finish()
+        lifecycleScope.launch {
+            val started = System.currentTimeMillis()
+            val user = AuthService.restoreSession()
+            val elapsed = System.currentTimeMillis() - started
+            if (elapsed < SPLASH_MS) delay(SPLASH_MS - elapsed)
+            if (user != null) {
+                Repository.start(user)
+                Navigator.openHome(this@SplashActivity, user)
+            } else {
+                startActivity(Intent(this@SplashActivity, LoginActivity::class.java))
+            }
+            finish()
+        }
     }
 
-    override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
-        super.onDestroy()
+    /** Explica cómo conectar el proyecto a Firebase cuando falta google-services.json. */
+    private fun showMissingFirebase() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.firebase_missing_title)
+            .setMessage(R.string.firebase_missing_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.action_close) { _, _ -> finish() }
+            .show()
     }
 
     companion object {
-        private const val SPLASH_MS = 1800L
+        private const val SPLASH_MS = 1500L
     }
 }

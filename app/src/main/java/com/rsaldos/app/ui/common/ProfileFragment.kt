@@ -5,16 +5,28 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import com.rsaldos.app.R
 import com.rsaldos.app.data.AuditType
+import com.rsaldos.app.data.AuthService
+import com.rsaldos.app.data.CredentialStore
 import com.rsaldos.app.data.OrderStatus
 import com.rsaldos.app.data.ProductStatus
 import com.rsaldos.app.data.Repository
 import com.rsaldos.app.data.Role
 import com.rsaldos.app.data.User
 import com.rsaldos.app.data.UserStatus
+import com.rsaldos.app.data.userMessage
 import com.rsaldos.app.databinding.FragmentProfileBinding
+import kotlinx.coroutines.launch
 
+/**
+ * Perfil del usuario (comprador, vendedor o administrador).
+ *
+ * Permite editar los datos de contacto (Update del CRUD propio en Firestore), activar o
+ * desactivar el ingreso con huella, gestionar los consentimientos, cambiar la contraseña en
+ * Firebase Authentication, cerrar sesión y solicitar la eliminación de la cuenta.
+ */
 class ProfileFragment : Fragment() {
     private var _binding: FragmentProfileBinding? = null
     private val binding get() = _binding!!
@@ -44,24 +56,22 @@ class ProfileFragment : Fragment() {
         binding.switchBiometric.setOnCheckedChangeListener { _, checked ->
             if (checked && !user.biometricEnabled) {
                 binding.switchBiometric.isChecked = false
-                BiometricHelper.authenticate(host, getString(R.string.bio_enable_title), getString(R.string.bio_enable_subtitle)) {
-                    user.biometricEnabled = true
-                    host.session.biometricUserId = user.id
-                    _binding?.switchBiometric?.isChecked = true
-                    host.toast(getString(R.string.bio_enabled))
-                }
+                enableBiometric(host)
             } else if (!checked && user.biometricEnabled) {
                 user.biometricEnabled = false
-                if (host.session.biometricUserId == user.id) host.session.biometricUserId = -1
+                CredentialStore(requireContext()).clear()
+                Repository.updateProfile(user, "Desactivó el ingreso con huella")
             }
         }
         binding.switchLocation.setOnCheckedChangeListener { _, checked ->
+            if (checked == user.locationConsent) return@setOnCheckedChangeListener
             user.locationConsent = checked
-            Repository.log(user.name, "Preferencia de ubicación", if (checked) "Autorizada" else "Retirada", AuditType.USERS)
+            Repository.updateProfile(user, "Preferencia de ubicación: " + if (checked) "autorizada" else "retirada")
         }
         binding.switchMarketing.setOnCheckedChangeListener { _, checked ->
+            if (checked == user.marketingConsent) return@setOnCheckedChangeListener
             user.marketingConsent = checked
-            Repository.log(user.name, "Consentimiento de publicidad", if (checked) "Otorgado" else "Retirado", AuditType.USERS)
+            Repository.updateProfile(user, "Consentimiento de publicidad: " + if (checked) "otorgado" else "retirado")
         }
 
         binding.btnSave.setOnClickListener { save() }
@@ -71,6 +81,35 @@ class ProfileFragment : Fragment() {
         binding.btnDeleteAccount.visible(user.role != Role.ADMIN)
     }
 
+    /**
+     * Activa la huella: pide la contraseña actual (se verifica con Firebase), confirma la
+     * huella con BiometricPrompt y guarda las credenciales cifradas en el dispositivo.
+     */
+    private fun enableBiometric(host: RoleHomeActivity) {
+        if (!BiometricHelper.isAvailable(host)) {
+            BiometricHelper.authenticate(host, "", "") { }
+            return
+        }
+        host.askText(getString(R.string.bio_enable_title), getString(R.string.bio_password_message),
+            getString(R.string.field_password), getString(R.string.action_continue), password = true) { password ->
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    AuthService.verifyPassword(password)
+                    BiometricHelper.authenticate(host, getString(R.string.bio_enable_title), getString(R.string.bio_enable_subtitle)) {
+                        CredentialStore(host).save(user.id, user.name, user.email, password)
+                        user.biometricEnabled = true
+                        Repository.updateProfile(user, "Activó el ingreso con huella")
+                        _binding?.switchBiometric?.isChecked = true
+                        host.toast(getString(R.string.bio_enabled))
+                    }
+                } catch (e: Exception) {
+                    host.toast(getString(e.userMessage()))
+                }
+            }
+        }
+    }
+
+    /** Pinta el avatar, nombre, correo, rol y estado. */
     private fun bindHeader() {
         binding.tvAvatar.avatar(user.initials, avatarColor(user.id))
         binding.tvName.text = user.name
@@ -79,6 +118,7 @@ class ProfileFragment : Fragment() {
         binding.tvStatus.badge(user.status.label, user.status.color, user.status.bg)
     }
 
+    /** Indicadores y datos de la tienda (solo vendedor). */
     private fun bindSeller() {
         val isSeller = user.role == Role.SELLER
         binding.cardSeller.visible(isSeller)
@@ -100,6 +140,7 @@ class ProfileFragment : Fragment() {
         binding.tvSellerInfo.text = getString(R.string.profile_seller_info, user.document, user.createdAt)
     }
 
+    /** Valida y guarda los datos de contacto en Firestore. */
     private fun save() {
         val name = binding.etName.text?.toString()?.trim().orEmpty()
         val phone = binding.etPhone.text?.toString()?.trim().orEmpty()
@@ -111,27 +152,39 @@ class ProfileFragment : Fragment() {
         user.phone = phone
         user.address = binding.etAddress.text?.toString()?.trim().orEmpty()
         if (user.role == Role.SELLER) user.storeName = binding.etStore.text?.toString()?.trim().orEmpty()
-        Repository.log(user.name, "Actualizó su perfil", "Datos de contacto", AuditType.USERS)
+        Repository.updateProfile(user, "Datos de contacto")
         bindHeader()
         requireContext().toast(getString(R.string.profile_saved))
     }
 
+    /** Cambia la contraseña: pide la actual (reautenticación) y luego la nueva. */
     private fun changePassword() {
-        requireContext().askText(
-            getString(R.string.profile_change_password),
-            getString(R.string.password_rules),
-            getString(R.string.field_new_password),
-            getString(R.string.action_save)
-        ) { value ->
-            if (Validators.isStrongPassword(value)) {
-                Repository.changePassword(user, value)
-                requireContext().toast(getString(R.string.password_changed))
-            } else {
-                requireContext().toast(getString(R.string.password_rules))
+        val ctx = requireContext()
+        ctx.askText(getString(R.string.profile_change_password), getString(R.string.password_current_message),
+            getString(R.string.field_current_password), getString(R.string.action_continue), password = true) { current ->
+            ctx.askText(getString(R.string.profile_change_password), getString(R.string.password_rules),
+                getString(R.string.field_new_password), getString(R.string.action_save), password = true) { value ->
+                if (!Validators.isStrongPassword(value)) {
+                    ctx.toast(getString(R.string.password_rules))
+                } else viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        AuthService.changePassword(current, value)
+                        val store = CredentialStore(ctx)
+                        if (store.uid == user.id) store.save(user.id, user.name, user.email, value)
+                        Repository.log(user.name, "Cambio de contraseña", "Desde el perfil", AuditType.SECURITY)
+                        ctx.toast(getString(R.string.password_changed))
+                    } catch (e: Exception) {
+                        ctx.toast(getString(e.userMessage()))
+                    }
+                }
             }
         }
     }
 
+    /**
+     * Eliminación de la cuenta a solicitud del titular: se confirma con la huella (o se informa
+     * si no hay), se marca como eliminada en Firestore y se cierra la sesión.
+     */
     private fun deleteAccount(host: RoleHomeActivity) {
         requireContext().confirm(
             getString(R.string.profile_delete_account),
@@ -140,7 +193,7 @@ class ProfileFragment : Fragment() {
         ) {
             BiometricHelper.authenticate(host, getString(R.string.profile_delete_account), getString(R.string.bio_confirm_identity)) {
                 Repository.deleteUser(user, user, "Solicitud del titular")
-                user.status = UserStatus.DELETED
+                CredentialStore(host).clear()
                 host.session.logout()
                 requireContext().toast(getString(R.string.profile_deleted))
                 Navigator.openLogin(host)

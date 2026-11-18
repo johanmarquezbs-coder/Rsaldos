@@ -77,7 +77,7 @@
     <string name="mfa_verify">Verificar</string>
     <string name="mfa_invalid">Código incorrecto. Intenta de nuevo.</string>
     <string name="bio_unavailable_title">Huella no disponible</string>
-    <string name="bio_unavailable_message">Este dispositivo no tiene sensor biométrico o no hay huellas registradas. Puedes usar tu contraseña.\n\nSolo para la validación en emulador puedes continuar en modo demostración.</string>
+    <string name="bio_unavailable_message">Este dispositivo no tiene sensor biométrico o no hay huellas registradas. Registra una huella en los ajustes del teléfono o ingresa con tu contraseña.</string>
     <string name="bio_use_password">Usar contraseña</string>
     <string name="bio_simulate">Modo demostración</string>
     <string name="bio_failed">Huella no reconocida. Intenta de nuevo.</string>
@@ -102,14 +102,14 @@
     <string name="register_done_seller">Tu cuenta de vendedor quedó pendiente de validación. Te avisaremos por correo cuando el administrador la apruebe.</string>
     <string name="recover_title">Recuperar contraseña</string>
     <string name="recover_step1_title">¿Olvidaste tu contraseña?</string>
-    <string name="recover_step1_message">Escribe tu correo y te enviaremos un código de un solo uso para crear una nueva.</string>
-    <string name="recover_send">Enviar código</string>
+    <string name="recover_step1_message">Escribe tu correo y te enviaremos un enlace seguro para crear una nueva contraseña.</string>
+    <string name="recover_send">Enviar enlace</string>
     <string name="recover_step2_title">Revisa tu correo</string>
-    <string name="recover_step2_message">Si %1$s está registrado, recibirás un código válido por 10 minutos.</string>
+    <string name="recover_step2_message">Si %1$s está registrado, recibirás un correo de R-Saldos con un enlace para restablecer tu contraseña. Ábrelo, crea la nueva contraseña y vuelve a iniciar sesión. Revisa también la carpeta de spam.</string>
     <string name="recover_demo_code">Código de demostración: %1$s</string>
     <string name="recover_reset">Cambiar contraseña</string>
-    <string name="recover_resend">Reenviar código</string>
-    <string name="recover_resent">Código reenviado</string>
+    <string name="recover_resend">Reenviar correo</string>
+    <string name="recover_resent">Correo reenviado</string>
     <string name="recover_done">Contraseña actualizada. Ya puedes iniciar sesión.</string>
     <string name="field_email">Correo electrónico</string>
     <string name="field_password">Contraseña</string>
@@ -231,7 +231,7 @@
     <string name="checkout_step_payment">2. Método de pago</string>
     <string name="checkout_step_summary">3. Resumen</string>
     <string name="checkout_use_location">Usar mi ubicación</string>
-    <string name="checkout_location_purpose">Opcional: solo se usa para confirmar cobertura de entrega; no se guarda la ubicación exacta.</string>
+    <string name="checkout_location_purpose">Opcional: toma tu ubicación GPS para llenar la dirección y la guarda con el pedido para que el vendedor ubique la entrega.</string>
     <string name="checkout_location_ok">Cobertura confirmada en %1$s (ubicación aproximada)</string>
     <string name="checkout_location_denied">Permiso denegado. Puedes escribir la dirección manualmente.</string>
     <string name="checkout_delivery_standard">Envío estándar · 2 a 4 días hábiles · $12.000</string>
@@ -240,14 +240,14 @@
     <string name="pay_pse">PSE</string>
     <string name="pay_nequi">Nequi</string>
     <string name="pay_card_masked">Tarjeta ****%1$s</string>
-    <string name="checkout_tokenized">Formulario seguro de la pasarela: R-Saldos no guarda el número completo ni el CVV.</string>
+    <string name="checkout_tokenized">Pago seguro con ePayco: los datos de tu tarjeta se escriben en el formulario certificado de ePayco; R-Saldos no los recibe ni los guarda.</string>
     <string name="checkout_card_hint">Prueba: 4242 4242 4242 4242 (aprobada) · 4000 0000 0000 0002 (rechazada)</string>
     <string name="checkout_pse_info">Serás redirigido a tu banco. El pedido queda pendiente hasta que la pasarela confirme el pago.</string>
     <string name="checkout_nequi_info">Recibirás una notificación en tu app Nequi para aprobar el pago.</string>
     <string name="checkout_summary">Subtotal: %1$s\nEnvío: %2$s\nTotal a pagar: %3$s</string>
     <string name="checkout_terms">Acepto los términos, la garantía informada y la política de retracto.</string>
     <string name="checkout_pay">Pagar %1$s</string>
-    <string name="checkout_processing">Procesando pago con la pasarela…</string>
+    <string name="checkout_processing">Creando el pedido…</string>
     <string name="result_approved">¡Pago aprobado!</string>
     <string name="result_pending">Pago pendiente</string>
     <string name="result_rejected">Pago rechazado</string>
@@ -353,7 +353,7 @@
     <string name="form_saved">Producto guardado · %1$s</string>
     <string name="form_no_camera">No hay una app de cámara disponible</string>
     <string name="form_scan_serial">Leer código de barras</string>
-    <string name="form_serial_scanned">Serial leído (lector simulado)</string>
+    <string name="form_serial_scanned">Serial interno generado</string>
     <string name="form_photo_added">Foto %1$d agregada</string>
     <string name="form_rejected">Rechazado por el administrador: %1$s</string>
     <string name="dispatch_title">Despachar %1$s</string>
@@ -470,4 +470,63 @@
         <item>Mayor precio</item>
         <item>Mayor descuento</item>
     </string-array>
+
+    <!-- Firebase, errores de red y de sesión -->
+    <string name="firebase_missing_title">Falta conectar Firebase</string>
+    <string name="firebase_missing_message">Este APK se compiló sin el archivo app/google-services.json. Cree el proyecto en la consola de Firebase, registre la app con el paquete com.rsaldos.app, descargue google-services.json en la carpeta app y vuelva a compilar.</string>
+    <string name="error_generic">Ocurrió un error. Intenta de nuevo.</string>
+    <string name="error_network">Sin conexión a internet. Revisa tu red e intenta de nuevo.</string>
+    <string name="error_too_many">Demasiados intentos. Espera unos minutos e intenta de nuevo.</string>
+    <string name="error_recent_login">Por seguridad debes volver a iniciar sesión para hacer este cambio.</string>
+    <string name="error_permission">No tienes permiso para esta acción.</string>
+    <string name="error_no_profile">La cuenta existe pero no tiene perfil en R-Saldos. Contacta al administrador.</string>
+    <string name="error_photo_read">No se pudo leer la foto seleccionada.</string>
+    <string name="error_payment_validation">No se pudo validar la transacción con ePayco.</string>
+    <string name="error_epayco_key">Falta configurar la llave pública de ePayco (EPAYCO_PUBLIC_KEY en gradle.properties).</string>
+    <string name="session_revoked">Tu cuenta fue desactivada por el administrador.</string>
+    <string name="login_loading">Ingresando…</string>
+    <string name="field_current_password">Contraseña actual</string>
+    <string name="password_current_message">Por seguridad, escribe tu contraseña actual.</string>
+
+    <!-- Huella -->
+    <string name="bio_offer_title">¿Activar el ingreso con huella?</string>
+    <string name="bio_offer_message">La próxima vez podrás entrar con tu huella sin escribir la contraseña. Tus credenciales quedan cifradas en este teléfono.</string>
+    <string name="bio_offer_later">Ahora no</string>
+    <string name="bio_offer_enable">Activar</string>
+    <string name="bio_password_message">Escribe tu contraseña para vincularla con tu huella en este teléfono.</string>
+
+    <!-- Usuarios (administrador) -->
+    <string name="user_send_reset">Enviar correo para restablecer contraseña</string>
+    <string name="user_reset_sent">Se envió el correo de restablecimiento a %1$s</string>
+    <string name="admin_no_reference">El comprador no completó el pago en ePayco: no hay referencia para conciliar.</string>
+    <string name="admin_reconciled_result">Conciliado con ePayco: %1$s</string>
+
+    <!-- Fotos de producto -->
+    <string name="form_pick_gallery">Galería</string>
+    <string name="form_max_photos">Máximo %1$d fotos por producto</string>
+    <string name="form_photo_description">Foto del producto</string>
+    <string name="form_remove_photo_title">Quitar foto</string>
+    <string name="form_remove_photo_message">¿Quitar esta foto del producto?</string>
+    <string name="form_uploading">Subiendo fotos y guardando…</string>
+    <string name="detail_photo_position">Foto %1$d de %2$d</string>
+
+    <!-- Entrega, geolocalización y ePayco -->
+    <string name="checkout_location_searching">Buscando tu ubicación…</string>
+    <string name="checkout_location_unavailable">No se pudo obtener la ubicación. Activa el GPS e intenta de nuevo.</string>
+    <string name="checkout_location_ok_coords">Ubicación capturada en %1$s (%2$s). Revisa la dirección antes de pagar.</string>
+    <string name="checkout_open_map">Ver en el mapa</string>
+    <string name="checkout_map_label">Entrega R-Saldos</string>
+    <string name="checkout_epayco_info">Al tocar Pagar se abre ePayco, donde eliges tarjeta de crédito o débito, PSE, Nequi, Daviplata u otro medio.</string>
+    <string name="checkout_epayco_test">Modo pruebas de ePayco: no se cobra dinero real; usa las tarjetas de prueba de ePayco.</string>
+    <string name="checkout_epayco_live">ePayco en modo producción.</string>
+    <string name="epayco_title">Pago seguro · ePayco</string>
+    <string name="epayco_validating">Validando la transacción con ePayco…</string>
+    <string name="epayco_no_reference">ePayco no devolvió la referencia de la transacción.</string>
+    <string name="epayco_cancel_title">¿Salir del pago?</string>
+    <string name="epayco_cancel_message">El pedido se cancelará y los productos seguirán en tu carrito.</string>
+    <string name="epayco_cancel_confirm">Salir</string>
+    <string name="result_reason">Detalle: %1$s</string>
+    <string name="order_location_line">Ubicación GPS: %1$s</string>
+    <string name="order_view_map">Ver mapa</string>
+    <string name="order_map_hint">📍 Toca aquí para ver la ubicación de entrega en el mapa</string>
 </resources>

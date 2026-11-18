@@ -20,6 +20,12 @@ import com.rsaldos.app.databinding.ItemProductRowBinding
 import com.rsaldos.app.databinding.ItemSimpleRowBinding
 import com.rsaldos.app.databinding.ItemUserBinding
 
+/*
+ * Adaptadores de RecyclerView usados por las listas de la app. Todos reciben la lista con
+ * submit() cada vez que el repositorio notifica cambios desde Firestore.
+ */
+
+/** Tarjetas de producto en cuadrícula (inicio del comprador) con foto, grado, precio y botón de agregar. */
 class ProductGridAdapter(
     private var items: List<Product>,
     private val onClick: (Product) -> Unit,
@@ -27,6 +33,7 @@ class ProductGridAdapter(
 ) : RecyclerView.Adapter<ProductGridAdapter.VH>() {
     class VH(val b: ItemProductGridBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<Product>) {
         items = list
         notifyDataSetChanged()
@@ -40,7 +47,7 @@ class ProductGridAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val p = items[position]
         val b = holder.b
-        b.ivProduct.setImageResource(p.category.icon)
+        b.ivProduct.loadProduct(p)
         b.tvTitle.text = p.title
         b.tvGrade.badge(p.grade.label, p.grade.color, p.grade.bg)
         b.tvPrice.text = Format.money(p.price)
@@ -57,6 +64,7 @@ class ProductGridAdapter(
     }
 }
 
+/** Filas de producto (catálogo, productos del vendedor y del administrador) con acción configurable. */
 class ProductRowAdapter(
     private var items: List<Product>,
     private val showStatus: Boolean,
@@ -66,6 +74,7 @@ class ProductRowAdapter(
 ) : RecyclerView.Adapter<ProductRowAdapter.VH>() {
     class VH(val b: ItemProductRowBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<Product>) {
         items = list
         notifyDataSetChanged()
@@ -80,7 +89,7 @@ class ProductRowAdapter(
         val p = items[position]
         val b = holder.b
         val ctx = b.root.context
-        b.ivProduct.setImageResource(p.category.icon)
+        b.ivProduct.loadProduct(p)
         b.tvTitle.text = p.title
         b.tvGrade.badge(p.grade.label, p.grade.color, p.grade.bg)
         if (showStatus) {
@@ -98,6 +107,7 @@ class ProductRowAdapter(
     }
 }
 
+/** Líneas del carrito con controles de cantidad y eliminación. */
 class CartAdapter(
     private var items: List<CartItem>,
     private val onQuantity: (CartItem, Int) -> Unit,
@@ -106,6 +116,7 @@ class CartAdapter(
 ) : RecyclerView.Adapter<CartAdapter.VH>() {
     class VH(val b: ItemCartBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<CartItem>) {
         items = list
         notifyDataSetChanged()
@@ -119,7 +130,7 @@ class CartAdapter(
     override fun onBindViewHolder(holder: VH, position: Int) {
         val item = items[position]
         val b = holder.b
-        b.ivProduct.setImageResource(item.product.category.icon)
+        b.ivProduct.loadProduct(item.product)
         b.tvTitle.text = item.product.title
         b.tvGrade.badge(item.product.grade.label, item.product.grade.color, item.product.grade.bg)
         b.tvPrice.text = Format.money(item.subtotal)
@@ -131,14 +142,19 @@ class CartAdapter(
     }
 }
 
+/**
+ * Pedidos (historial del comprador, bandeja del vendedor y pagos del administrador).
+ * Si se indica [sellerId], solo muestra las líneas y el subtotal de ese vendedor.
+ */
 class OrderAdapter(
     private var items: List<Order>,
     private val actionLabel: (Order) -> String,
-    private val sellerId: Int? = null,
+    private val sellerId: String? = null,
     private val onClick: (Order) -> Unit
 ) : RecyclerView.Adapter<OrderAdapter.VH>() {
     class VH(val b: ItemOrderBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<Order>) {
         items = list
         notifyDataSetChanged()
@@ -164,6 +180,7 @@ class OrderAdapter(
     }
 }
 
+/** Usuarios para la gestión del administrador, con rol, estado y menú de acciones. */
 class UserAdapter(
     private var items: List<User>,
     private val onClick: (User) -> Unit,
@@ -171,6 +188,7 @@ class UserAdapter(
 ) : RecyclerView.Adapter<UserAdapter.VH>() {
     class VH(val b: ItemUserBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<User>) {
         items = list
         notifyDataSetChanged()
@@ -199,9 +217,11 @@ class UserAdapter(
     }
 }
 
+/** Eventos de la bitácora de auditoría. */
 class AuditAdapter(private var items: List<AuditEvent>) : RecyclerView.Adapter<AuditAdapter.VH>() {
     class VH(val b: ItemSimpleRowBinding) : RecyclerView.ViewHolder(b.root)
 
+    /** Reemplaza los elementos y redibuja la lista. */
     fun submit(list: List<AuditEvent>) {
         items = list
         notifyDataSetChanged()
