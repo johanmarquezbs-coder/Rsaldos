@@ -5,11 +5,13 @@ import com.rsaldos.app.R
 import com.rsaldos.app.ui.common.ProfileFragment
 import com.rsaldos.app.ui.common.RoleHomeActivity
 
+/** Pantalla principal del rol Administrador (menús y fragmentos propios). */
 class AdminHomeActivity : RoleHomeActivity() {
     override val bottomMenu = R.menu.bottom_admin
     override val drawerMenu = R.menu.drawer_admin
     override val startDestination = R.id.nav_admin_dashboard
 
+    /** Fragmento de cada opción del menú del administrador. */
     override fun fragmentFor(itemId: Int): Fragment? = when (itemId) {
         R.id.nav_admin_dashboard -> AdminDashboardFragment()
         R.id.nav_admin_users -> AdminUsersFragment()

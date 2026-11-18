@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.seller
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -18,7 +19,11 @@ import com.rsaldos.app.ui.common.addRow
 import com.rsaldos.app.ui.common.badge
 import com.rsaldos.app.ui.common.setBars
 
-class SellerDashboardFragment : Fragment() {
+/**
+ * Panel del vendedor: ventas del periodo, pedidos por despachar, productos publicados y en
+ * revisión, ventas por categoría y alertas de inventario.
+ */
+class SellerDashboardFragment : Fragment(), Refreshable {
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
 
@@ -49,13 +54,15 @@ class SellerDashboardFragment : Fragment() {
         refresh()
     }
 
+    /** Días del periodo seleccionado en los chips. */
     private fun periodDays(): Int = when (binding.chipPeriod.checkedChipId) {
         R.id.chipToday -> 0
         R.id.chipWeek -> 7
         else -> 30
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val user = (requireActivity() as RoleHomeActivity).user
         val products = Repository.productsOfSeller(user.id)
         val allOrders = Repository.ordersOfSeller(user.id)
@@ -104,7 +111,8 @@ class SellerDashboardFragment : Fragment() {
         }
     }
 
-    private fun openForm(productId: Int) {
+    /** Abre el formulario del producto indicado. */
+    private fun openForm(productId: String) {
         startActivity(Intent(requireContext(), ProductFormActivity::class.java)
             .putExtra(ProductFormActivity.EXTRA_ID, productId))
     }

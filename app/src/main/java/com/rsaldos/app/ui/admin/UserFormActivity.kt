@@ -2,6 +2,10 @@ package com.rsaldos.app.ui.admin
 
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.rsaldos.app.data.AuthService
+import com.rsaldos.app.data.userMessage
+import kotlinx.coroutines.launch
 import com.rsaldos.app.R
 import com.rsaldos.app.data.Repository
 import com.rsaldos.app.data.Role
@@ -17,6 +21,14 @@ import com.rsaldos.app.ui.common.confirm
 import com.rsaldos.app.ui.common.toast
 import com.rsaldos.app.ui.common.visible
 
+/**
+ * Formulario de usuarios del Administrador (Create y Update del CRUD de usuarios).
+ *
+ * Crear: registra la cuenta en Firebase Authentication con una contraseña temporal (sin
+ * cerrar la sesión del administrador) y guarda el perfil en Firestore. Editar: actualiza
+ * datos, rol y estado con un motivo obligatorio que queda en la auditoría. Eliminar: baja
+ * lógica. También permite enviar al usuario el correo para restablecer su contraseña.
+ */
 class UserFormActivity : AppCompatActivity() {
     private lateinit var binding: ActivityUserFormBinding
     private lateinit var admin: User
@@ -31,8 +43,8 @@ class UserFormActivity : AppCompatActivity() {
         val current = SessionManager(this).currentUser()
         if (current == null) { finish(); return }
         admin = current
-        val id = intent.getIntExtra(EXTRA_ID, -1)
-        editing = if (id >= 0) Repository.findUser(id) else null
+        val id = intent.getStringExtra(EXTRA_ID).orEmpty()
+        editing = if (id.isNotEmpty()) Repository.findUser(id) else null
 
         binding.appBar.root.title = getString(if (editing == null) R.string.user_new_title else R.string.user_edit_title)
         binding.appBar.root.setNavigationOnClickListener { finish() }
@@ -43,9 +55,11 @@ class UserFormActivity : AppCompatActivity() {
             updateSessions()
             toast(getString(R.string.user_sessions_closed))
         }
+        binding.btnSendReset.setOnClickListener { sendReset() }
         fill()
     }
 
+    /** Llena el formulario con el usuario a editar o con valores por defecto si es nuevo. */
     private fun fill() {
         val u = editing
         val isEdit = u != null
@@ -55,6 +69,7 @@ class UserFormActivity : AppCompatActivity() {
         binding.tvAuditNote.visible(isEdit)
         binding.layoutSessions.visible(isEdit)
         binding.btnDelete.visible(isEdit && u?.id != admin.id)
+        binding.btnSendReset.visible(isEdit)
 
         if (u == null) {
             binding.toggleRole.check(R.id.btnRoleBuyer)
@@ -89,17 +104,20 @@ class UserFormActivity : AppCompatActivity() {
         }
     }
 
+    /** Muestra cuántas sesiones abiertas tiene el usuario. */
     private fun updateSessions() {
         binding.tvSessions.text = resources.getQuantityString(R.plurals.sessions_open, sessions, sessions)
         binding.btnCloseSessions.isEnabled = sessions > 0
     }
 
+    /** Rol elegido en el selector. */
     private fun selectedRole(): Role = when (binding.toggleRole.checkedButtonId) {
         R.id.btnRoleSeller -> Role.SELLER
         R.id.btnRoleAdmin -> Role.ADMIN
         else -> Role.BUYER
     }
 
+    /** Valida el formulario y crea o actualiza el usuario en Firebase. */
     private fun save() {
         listOf(binding.tilName, binding.tilEmail, binding.tilDocument, binding.tilPhone, binding.tilPassword, binding.tilReason)
             .forEach { it.error = null }
@@ -114,7 +132,7 @@ class UserFormActivity : AppCompatActivity() {
         var ok = true
         if (name.length < 3) { binding.tilName.error = getString(R.string.error_name); ok = false }
         if (!Validators.isEmail(email)) { binding.tilEmail.error = getString(R.string.error_email); ok = false }
-        else if (Repository.emailExists(email, u?.id ?: -1)) { binding.tilEmail.error = getString(R.string.error_email_exists); ok = false }
+        else if (Repository.emailExists(email, u?.id ?: "")) { binding.tilEmail.error = getString(R.string.error_email_exists); ok = false }
         if (document.length < 5) { binding.tilDocument.error = getString(R.string.error_document); ok = false }
         if (!Validators.isPhone(phone)) { binding.tilPhone.error = getString(R.string.error_phone); ok = false }
         if (u == null && !Validators.isStrongPassword(password)) { binding.tilPassword.error = getString(R.string.password_rules); ok = false }
@@ -123,15 +141,29 @@ class UserFormActivity : AppCompatActivity() {
 
         val status = if (binding.switchActive.isChecked) UserStatus.ACTIVE else UserStatus.BLOCKED
         if (u == null) {
-            val created = Repository.createUser(
-                admin,
-                User(
-                    id = -1, name = name, email = email, password = password, document = document, phone = phone,
-                    role = selectedRole(), status = status, mustChangePassword = binding.switchForcePassword.isChecked,
-                    storeName = if (selectedRole() == Role.SELLER) name else "", openSessions = 0
-                )
-            )
-            toast(getString(R.string.user_created, created.email))
+            binding.btnSave.isEnabled = false
+            lifecycleScope.launch {
+                try {
+                    val created = Repository.createUser(
+                        admin,
+                        User(
+                            id = "", name = name, email = email, document = document, phone = phone,
+                            role = selectedRole(), status = status, mustChangePassword = binding.switchForcePassword.isChecked,
+                            storeName = if (selectedRole() == Role.SELLER) name else "", openSessions = 0
+                        ),
+                        password
+                    )
+                    toast(getString(R.string.user_created, created.email))
+                    finish()
+                } catch (e: Exception) {
+                    val message = e.userMessage()
+                    if (message == R.string.error_email_exists) binding.tilEmail.error = getString(message)
+                    else toast(getString(message))
+                } finally {
+                    binding.btnSave.isEnabled = true
+                }
+            }
+            return
         } else {
             val updated = u.copy(
                 name = name, email = email, document = document, phone = phone, role = selectedRole(),
@@ -145,6 +177,21 @@ class UserFormActivity : AppCompatActivity() {
         finish()
     }
 
+    /** Envía al usuario el correo de Firebase para restablecer su contraseña. */
+    private fun sendReset() {
+        val u = editing ?: return
+        lifecycleScope.launch {
+            try {
+                AuthService.sendPasswordReset(u.email)
+                Repository.log(admin.name, "Envió restablecimiento de contraseña", u.email, com.rsaldos.app.data.AuditType.SECURITY)
+                toast(getString(R.string.user_reset_sent, u.email))
+            } catch (e: Exception) {
+                toast(getString(e.userMessage()))
+            }
+        }
+    }
+
+    /** Eliminación lógica del usuario con motivo obligatorio. */
     private fun delete() {
         val u = editing ?: return
         val reason = binding.etReason.text?.toString()?.trim().orEmpty()

@@ -232,6 +232,16 @@
                             android:text="@string/user_close_sessions"
                             android:textColor="@color/rs_red" />
                     </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSendReset"
+                        style="@style/Widget.RSaldos.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_s"
+                        android:text="@string/user_send_reset"
+                        app:icon="@drawable/ic_email"
+                        app:iconGravity="textStart" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

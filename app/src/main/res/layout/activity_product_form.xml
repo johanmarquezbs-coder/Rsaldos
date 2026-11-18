@@ -73,6 +73,32 @@
                             android:textSize="@dimen/text_caption"
                             android:textStyle="bold" />
                     </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/btnPickGallery"
+                        android:layout_width="96dp"
+                        android:layout_height="96dp"
+                        android:layout_marginStart="@dimen/space_s"
+                        android:background="@drawable/bg_soft_orange"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_gallery"
+                            app:tint="@color/rs_orange" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_xs"
+                            android:text="@string/form_pick_gallery"
+                            android:textColor="@color/rs_orange_dark"
+                            android:textSize="@dimen/text_caption"
+                            android:textStyle="bold" />
+                    </LinearLayout>
                 </LinearLayout>
             </HorizontalScrollView>
 

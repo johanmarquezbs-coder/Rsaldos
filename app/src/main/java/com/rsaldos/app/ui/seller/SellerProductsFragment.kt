@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.seller
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -21,7 +22,11 @@ import com.rsaldos.app.ui.common.confirm
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.common.toast
 
-class SellerProductsFragment : Fragment() {
+/**
+ * Productos del vendedor (Read del CRUD): filtros por estado, búsqueda por título o serial y
+ * acciones de editar, pausar o eliminar.
+ */
+class SellerProductsFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: ProductRowAdapter
@@ -61,7 +66,8 @@ class SellerProductsFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val user = (requireActivity() as RoleHomeActivity).user
         val status = binding.chipFilters.checkedTag() as? ProductStatus
         val query = binding.etSearch.text?.toString()?.trim()?.lowercase().orEmpty()
@@ -73,6 +79,7 @@ class SellerProductsFragment : Fragment() {
         binding.tvEmpty.visible(list.isEmpty())
     }
 
+    /** Menú de acciones de un producto. */
     private fun showMenu(product: Product, anchor: View) {
         val user = (requireActivity() as RoleHomeActivity).user
         val popup = PopupMenu(requireContext(), anchor)
@@ -101,7 +108,8 @@ class SellerProductsFragment : Fragment() {
         popup.show()
     }
 
-    private fun openForm(id: Int) {
+    /** Abre el formulario del producto. */
+    private fun openForm(id: String) {
         startActivity(Intent(requireContext(), ProductFormActivity::class.java).putExtra(ProductFormActivity.EXTRA_ID, id))
     }
 

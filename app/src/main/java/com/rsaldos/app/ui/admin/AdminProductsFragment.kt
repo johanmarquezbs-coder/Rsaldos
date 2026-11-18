@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.admin
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -26,7 +27,11 @@ import com.rsaldos.app.ui.common.toast
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.seller.ProductFormActivity
 
-class AdminProductsFragment : Fragment() {
+/**
+ * Gestión de productos del administrador: revisión, aprobación, rechazo con motivo, pausa,
+ * edición y eliminación de cualquier publicación del catálogo en Firestore.
+ */
+class AdminProductsFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: ProductRowAdapter
@@ -59,7 +64,8 @@ class AdminProductsFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val status = binding.chipFilters.checkedTag() as? ProductStatus
         val list = Repository.allProducts().filter { status == null || it.status == status }
         adapter.submit(list)
@@ -67,11 +73,12 @@ class AdminProductsFragment : Fragment() {
         binding.tvEmpty.visible(list.isEmpty())
     }
 
+    /** Muestra la ficha completa del producto para revisarla antes de aprobar o rechazar. */
     private fun review(p: Product) {
         val seller = Repository.findUser(p.sellerId)
         val message = getString(
             R.string.admin_review_message,
-            seller?.storeName?.ifBlank { null } ?: seller?.name ?: "—",
+            p.sellerName.ifBlank { null } ?: seller?.storeName?.ifBlank { null } ?: seller?.name ?: "—",
             p.condition.label, p.grade.label, Format.money(p.price), p.stock, p.serial,
             p.warrantyMonths, p.photos, p.tests, p.defects
         )
@@ -86,6 +93,7 @@ class AdminProductsFragment : Fragment() {
         builder.show()
     }
 
+    /** Publica el producto en el catálogo. */
     private fun approve(p: Product) {
         val admin = (requireActivity() as RoleHomeActivity).user
         Repository.approveProduct(admin, p)
@@ -93,6 +101,7 @@ class AdminProductsFragment : Fragment() {
         refresh()
     }
 
+    /** Rechaza el producto pidiendo el motivo, que verá el vendedor. */
     private fun reject(p: Product) {
         val admin = (requireActivity() as RoleHomeActivity).user
         requireContext().askText(getString(R.string.action_reject), getString(R.string.admin_reject_message), getString(R.string.field_reason), getString(R.string.action_reject)) { reason ->
@@ -102,6 +111,7 @@ class AdminProductsFragment : Fragment() {
         }
     }
 
+    /** Menú de acciones de un producto. */
     private fun showMenu(p: Product, anchor: View) {
         val admin = (requireActivity() as RoleHomeActivity).user
         val popup = PopupMenu(requireContext(), anchor)

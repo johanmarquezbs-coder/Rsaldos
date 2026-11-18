@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.admin
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -23,7 +24,11 @@ import com.rsaldos.app.ui.common.checkedTag
 import com.rsaldos.app.ui.common.toast
 import com.rsaldos.app.ui.common.visible
 
-class AdminUsersFragment : Fragment() {
+/**
+ * Gestión de usuarios del administrador (Read y Delete del CRUD): búsqueda, filtros por rol y
+ * estado, aprobación de vendedores, bloqueo, desbloqueo y eliminación lógica con motivo.
+ */
+class AdminUsersFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: UserAdapter
@@ -61,7 +66,8 @@ class AdminUsersFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val query = binding.etSearch.text?.toString()?.trim()?.lowercase().orEmpty()
         val filter = binding.chipFilters.checkedTag()
         val list = Repository.allUsers()
@@ -81,6 +87,7 @@ class AdminUsersFragment : Fragment() {
         binding.tvEmpty.visible(list.isEmpty())
     }
 
+    /** Menú de acciones sobre un usuario. */
     private fun showMenu(target: User, anchor: View) {
         val admin = (requireActivity() as RoleHomeActivity).user
         val popup = PopupMenu(requireContext(), anchor)
@@ -111,6 +118,7 @@ class AdminUsersFragment : Fragment() {
         popup.show()
     }
 
+    /** Pide el motivo obligatorio antes de ejecutar la acción y refresca la lista. */
     private fun withReason(titleRes: Int, action: (String) -> Unit) {
         requireContext().askText(getString(titleRes), getString(R.string.users_reason_message), getString(R.string.user_reason), getString(R.string.action_confirm)) { reason ->
             action(reason)
@@ -119,6 +127,7 @@ class AdminUsersFragment : Fragment() {
         }
     }
 
+    /** Abre el formulario de edición del usuario. */
     private fun openForm(user: User) {
         startActivity(Intent(requireContext(), UserFormActivity::class.java).putExtra(UserFormActivity.EXTRA_ID, user.id))
     }

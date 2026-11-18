@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.admin
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -17,7 +18,8 @@ import com.rsaldos.app.ui.common.checkedTag
 import com.rsaldos.app.ui.common.color
 import com.rsaldos.app.ui.common.visible
 
-class AuditFragment : Fragment() {
+/** Bitácora de auditoría (colección audit de Firestore), filtrable por tipo de evento. */
+class AuditFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: AuditAdapter
@@ -45,7 +47,8 @@ class AuditFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val type = binding.chipFilters.checkedTag() as? AuditType
         val list = Repository.auditLog().filter { type == null || it.type == type }
         adapter.submit(list)

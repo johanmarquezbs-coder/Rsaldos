@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.seller
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -19,10 +20,16 @@ import com.rsaldos.app.ui.common.OrderAdapter
 import com.rsaldos.app.ui.common.RoleHomeActivity
 import com.rsaldos.app.ui.common.addChip
 import com.rsaldos.app.ui.common.checkedTag
+import com.rsaldos.app.ui.common.openOrderMap
 import com.rsaldos.app.ui.common.toast
 import com.rsaldos.app.ui.common.visible
 
-class SellerOrdersFragment : Fragment() {
+/**
+ * Pedidos recibidos por el vendedor (solo las líneas de sus productos). Permite pasar a
+ * alistamiento, despachar con transportadora y guía, marcar como entregado y ver en el mapa
+ * la ubicación GPS de entrega que capturó el comprador.
+ */
+class SellerOrdersFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: OrderAdapter
@@ -55,7 +62,8 @@ class SellerOrdersFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val user = (requireActivity() as RoleHomeActivity).user
         val all = Repository.ordersOfSeller(user.id)
         val list = when (binding.chipFilters.checkedTag()) {
@@ -68,13 +76,15 @@ class SellerOrdersFragment : Fragment() {
         binding.tvEmpty.visible(list.isEmpty())
     }
 
+    /** Datos mínimos del comprador (nombre abreviado y correo enmascarado) y ciudad de entrega. */
     private fun buyerInfo(order: Order): String {
-        val buyer = Repository.findUser(order.buyerId)
-        val name = buyer?.name?.let { it.substringBefore(" ") + " " + it.substringAfter(" ", "").take(1) + "." } ?: "—"
-        val email = buyer?.email?.let { Format.maskEmail(it) } ?: "—"
+        val name = order.buyerName.takeIf { it.isNotBlank() }
+            ?.let { it.substringBefore(" ") + " " + it.substringAfter(" ", "").take(1) + "." } ?: "—"
+        val email = order.buyerEmail.takeIf { it.isNotBlank() }?.let { Format.maskEmail(it) } ?: "—"
         return getString(R.string.dispatch_buyer, name, email, order.address.substringAfterLast(",").trim())
     }
 
+    /** Detalle del pedido o diálogo de despacho, según su estado. */
     private fun onOrder(order: Order) {
         val user = (requireActivity() as RoleHomeActivity).user
         val lines = order.lines.filter { it.sellerId == user.id }
@@ -97,7 +107,9 @@ class SellerOrdersFragment : Fragment() {
         }
 
         val d = DialogDispatchBinding.inflate(layoutInflater)
-        d.tvOrderInfo.text = buyerInfo(order) + "\n\n" + lines
+        d.tvOrderInfo.text = buyerInfo(order) + "\n\n" + lines +
+            if (order.hasLocation) "\n\n" + getString(R.string.order_map_hint) else ""
+        if (order.hasLocation) d.tvOrderInfo.setOnClickListener { requireContext().openOrderMap(order) }
         val carriers = resources.getStringArray(R.array.carriers)
         d.actCarrier.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_list_item_1, carriers))
         val dialog = MaterialAlertDialogBuilder(requireContext())

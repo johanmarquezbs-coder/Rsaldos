@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.admin
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -17,7 +18,11 @@ import com.rsaldos.app.ui.common.addRow
 import com.rsaldos.app.ui.common.badge
 import com.rsaldos.app.ui.common.setBars
 
-class SalesReportFragment : Fragment() {
+/**
+ * Reporte de ventas del administrador: ingresos, pedidos, ticket promedio, ventas por categoría
+ * y productos más vendidos en el periodo elegido; exporta el detalle en CSV.
+ */
+class SalesReportFragment : Fragment(), Refreshable {
     private var _binding: FragmentDashboardBinding? = null
     private val binding get() = _binding!!
 
@@ -45,13 +50,15 @@ class SalesReportFragment : Fragment() {
         refresh()
     }
 
+    /** Días del periodo seleccionado en los chips (hoy, 7 o 30 días). */
     private fun periodDays(): Int = when (binding.chipPeriod.checkedChipId) {
         R.id.chipToday -> 0
         R.id.chipWeek -> 7
         else -> 30
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val orders = Repository.allOrders().filter { Repository.inPeriod(it, periodDays()) }
         val sales = orders.filter { Repository.isSale(it) }
         val revenue = Repository.salesTotal(sales)
@@ -89,6 +96,7 @@ class SalesReportFragment : Fragment() {
         }
     }
 
+    /** Genera un CSV con los pedidos del periodo y lo comparte con otra app. */
     private fun exportCsv() {
         val admin = (requireActivity() as RoleHomeActivity).user
         val orders = Repository.allOrders().filter { Repository.inPeriod(it, periodDays()) }
