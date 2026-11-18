@@ -12,20 +12,27 @@ import com.rsaldos.app.data.Role
 import com.rsaldos.app.databinding.ActivityProductDetailBinding
 import com.rsaldos.app.ui.common.avatar
 import com.rsaldos.app.ui.common.badge
+import com.rsaldos.app.ui.common.loadProduct
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.common.toast
 
+/**
+ * Detalle del producto: fotos reales (tocar la imagen pasa a la siguiente), condición, grado,
+ * pruebas, garantía, defectos declarados y vendedor. El comprador elige la cantidad y lo
+ * agrega a su carrito en Firestore; los demás roles solo lo ven en modo vista previa.
+ */
 class ProductDetailActivity : AppCompatActivity() {
     private lateinit var binding: ActivityProductDetailBinding
     private lateinit var product: Product
     private var quantity = 1
+    private var photoIndex = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityProductDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val found = Repository.product(intent.getIntExtra(EXTRA_ID, -1))
+        val found = Repository.product(intent.getStringExtra(EXTRA_ID).orEmpty())
         if (found == null) {
             toast(getString(R.string.product_not_found))
             finish()
@@ -48,9 +55,17 @@ class ProductDetailActivity : AppCompatActivity() {
         }
     }
 
+    /** Pinta todos los datos del producto. */
     private fun bind() {
         val p = product
-        binding.ivProduct.setImageResource(p.category.icon)
+        binding.ivProduct.loadProduct(p)
+        binding.ivProduct.setOnClickListener {
+            if (p.photos > 1) {
+                photoIndex = (photoIndex + 1) % p.photos
+                binding.ivProduct.loadProduct(p, photoIndex)
+                binding.tvPhotos.text = getString(R.string.detail_photo_position, photoIndex + 1, p.photos)
+            }
+        }
         if (p.discountPercent > 0) binding.tvDiscount.badge("-${p.discountPercent}%", R.color.rs_white, R.color.rs_orange)
         else binding.tvDiscount.visible(false)
         binding.tvPhotos.badge(getString(R.string.detail_photos, p.photos), R.color.rs_white, R.color.rs_graphite)
@@ -72,20 +87,22 @@ class ProductDetailActivity : AppCompatActivity() {
         binding.tvSerial.text = getString(R.string.detail_serial, p.maskedSerial, p.grade.detail)
         binding.tvDescription.text = p.description
 
-        val seller = Repository.findUser(p.sellerId)
-        val sellerName = seller?.let { s -> s.storeName.ifBlank { s.name } } ?: getString(R.string.app_name)
-        binding.tvSellerAvatar.avatar(seller?.initials ?: "RS", R.color.rs_graphite)
+        val sellerName = p.sellerName.ifBlank { getString(R.string.app_name) }
+        val initials = sellerName.split(" ").filter { it.isNotBlank() }.take(2).joinToString("") { it.first().uppercase() }
+        binding.tvSellerAvatar.avatar(initials.ifBlank { "RS" }, R.color.rs_graphite)
         binding.tvSellerName.text = getString(R.string.detail_sold_by, sellerName)
         binding.tvSellerMeta.text = getString(R.string.detail_seller_meta, p.rating.toString().replace('.', ','))
         setQuantity(1)
     }
 
+    /** Cambia la cantidad sin superar el stock disponible. */
     private fun setQuantity(value: Int) {
         if (value < 1 || value > product.stock) return
         quantity = value
         binding.tvQty.text = quantity.toString()
     }
 
+    /** Agrega la cantidad elegida al carrito (users/{uid}/cart en Firestore). */
     private fun addToCart() {
         if (Repository.addToCart(product, quantity)) {
             toast(getString(R.string.cart_added, product.title))

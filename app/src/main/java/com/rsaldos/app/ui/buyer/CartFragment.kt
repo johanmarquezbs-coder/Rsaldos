@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.buyer
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -17,7 +18,11 @@ import com.rsaldos.app.ui.common.confirm
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.common.toast
 
-class CartFragment : Fragment() {
+/**
+ * Carrito de compras (CRUD en users/{uid}/cart de Firestore): cambiar cantidades, eliminar
+ * líneas, vaciar el carrito e ir al checkout.
+ */
+class CartFragment : Fragment(), Refreshable {
     private var _binding: FragmentCartBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: CartAdapter
@@ -65,6 +70,7 @@ class CartFragment : Fragment() {
         refresh()
     }
 
+    /** Confirma antes de quitar un producto del carrito. */
     private fun removeItem(title: String, action: () -> Unit) {
         requireContext().confirm(getString(R.string.cart_remove_title), getString(R.string.cart_remove_message, title), getString(R.string.action_delete)) {
             action()
@@ -72,7 +78,8 @@ class CartFragment : Fragment() {
         }
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val items = Repository.cart.toList()
         adapter.submit(items)
         val empty = items.isEmpty()

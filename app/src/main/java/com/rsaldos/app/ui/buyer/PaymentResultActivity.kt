@@ -13,6 +13,11 @@ import com.rsaldos.app.ui.common.RoleHomeActivity
 import com.rsaldos.app.ui.common.color
 import com.rsaldos.app.ui.common.tint
 
+/**
+ * Resultado del pago validado con ePayco: aprobado, pendiente o rechazado, con el número de
+ * pedido, la referencia de ePayco, el total y el medio de pago. Desde aquí el comprador va a
+ * sus pedidos, sigue comprando o reintenta el pago.
+ */
 class PaymentResultActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPaymentResultBinding
 
@@ -40,13 +45,14 @@ class PaymentResultActivity : AppCompatActivity() {
                 PaymentResult.REJECTED -> R.string.result_rejected
             }
         )
+        val reason = intent.getStringExtra(EXTRA_REASON).orEmpty()
         binding.tvStatusMessage.text = getString(
             when (result) {
                 PaymentResult.APPROVED -> R.string.result_approved_message
                 PaymentResult.PENDING -> R.string.result_pending_message
                 PaymentResult.REJECTED -> R.string.result_rejected_message
             }
-        )
+        ) + if (reason.isNotBlank() && result != PaymentResult.APPROVED) "\n\n" + getString(R.string.result_reason, reason) else ""
         if (order != null) {
             binding.tvDetails.text = getString(
                 R.string.result_details, order.id, order.paymentRef, Format.money(order.total), order.paymentMethod, order.date
@@ -66,6 +72,7 @@ class PaymentResultActivity : AppCompatActivity() {
         }
     }
 
+    /** Vuelve a la pantalla del comprador en la pestaña indicada. */
     private fun goHome(tab: Int) {
         val intent = Intent(this, BuyerHomeActivity::class.java)
             .putExtra(RoleHomeActivity.EXTRA_TAB, tab)
@@ -77,5 +84,6 @@ class PaymentResultActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_ORDER = "order_id"
         const val EXTRA_RESULT = "result"
+        const val EXTRA_REASON = "reason"
     }
 }

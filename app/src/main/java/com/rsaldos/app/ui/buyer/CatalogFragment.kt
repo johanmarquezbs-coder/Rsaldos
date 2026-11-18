@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.buyer
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -23,7 +24,8 @@ import com.rsaldos.app.ui.common.checkedTag
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.common.toast
 
-class CatalogFragment : Fragment() {
+/** Catálogo con búsqueda, filtros por categoría, grado y precio, y orden por precio o descuento. */
+class CatalogFragment : Fragment(), Refreshable {
     private var _binding: FragmentCatalogBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: ProductRowAdapter
@@ -62,7 +64,8 @@ class CatalogFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val grades = mutableSetOf<Grade>()
         if (binding.chipGradeA.isChecked) grades += Grade.A
         if (binding.chipGradeB.isChecked) grades += Grade.B
@@ -82,6 +85,7 @@ class CatalogFragment : Fragment() {
         binding.tvEmpty.visible(results.isEmpty())
     }
 
+    /** Restablece los filtros. */
     private fun clearFilters() {
         binding.chipGrades.clearCheck()
         binding.sliderPrice.value = 3_000_000f
@@ -90,6 +94,7 @@ class CatalogFragment : Fragment() {
         refresh()
     }
 
+    /** Menú de ordenamiento de resultados. */
     private fun showSortMenu() {
         val popup = PopupMenu(requireContext(), binding.tvSort)
         val labels = resources.getStringArray(R.array.sort_options)
@@ -103,15 +108,18 @@ class CatalogFragment : Fragment() {
         popup.show()
     }
 
+    /** Muestra el criterio de orden actual. */
     private fun updateSortLabel() {
         binding.tvSort.text = getString(R.string.sort_label, resources.getStringArray(R.array.sort_options)[sort])
     }
 
+    /** Abre el detalle del producto. */
     private fun openDetail(product: Product) {
         startActivity(Intent(requireContext(), ProductDetailActivity::class.java)
             .putExtra(ProductDetailActivity.EXTRA_ID, product.id))
     }
 
+    /** Agrega una unidad al carrito. */
     private fun addToCart(product: Product) {
         if (Repository.addToCart(product)) {
             requireContext().toast(getString(R.string.cart_added, product.title))

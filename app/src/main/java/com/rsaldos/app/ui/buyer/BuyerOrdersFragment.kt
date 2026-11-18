@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.buyer
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -20,10 +21,16 @@ import com.rsaldos.app.ui.common.addChip
 import com.rsaldos.app.ui.common.askText
 import com.rsaldos.app.ui.common.checkedTag
 import com.rsaldos.app.ui.common.confirm
+import com.rsaldos.app.ui.common.openOrderMap
 import com.rsaldos.app.ui.common.visible
 import com.rsaldos.app.ui.common.toast
 
-class BuyerOrdersFragment : Fragment() {
+/**
+ * Historial de pedidos del comprador (Read del CRUD de órdenes en Firestore), con filtros,
+ * detalle, ubicación de entrega en el mapa, cancelación de pedidos no despachados y
+ * solicitud de garantía para los entregados.
+ */
+class BuyerOrdersFragment : Fragment(), Refreshable {
     private var _binding: FragmentListBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: OrderAdapter
@@ -56,7 +63,8 @@ class BuyerOrdersFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val user = (requireActivity() as RoleHomeActivity).user
         val all = Repository.ordersOfBuyer(user.id)
         val list = when (binding.chipFilters.checkedTag()) {
@@ -69,6 +77,7 @@ class BuyerOrdersFragment : Fragment() {
         binding.tvEmpty.visible(list.isEmpty())
     }
 
+    /** Muestra el detalle del pedido con las acciones disponibles según su estado. */
     private fun showDetail(order: Order) {
         val ctx = requireContext()
         val user = (requireActivity() as RoleHomeActivity).user
@@ -76,12 +85,14 @@ class BuyerOrdersFragment : Fragment() {
         val tracking = if (order.tracking.isNotBlank()) getString(R.string.order_tracking_line, order.carrier, order.tracking) else getString(R.string.order_no_tracking)
         val message = getString(
             R.string.order_detail_message, lines, Format.money(order.shipping), Format.money(order.total),
-            order.address, order.paymentMethod, order.paymentRef, tracking
-        )
+            order.address, order.paymentMethod, order.paymentRef.ifBlank { "—" }, tracking
+        ) + if (order.hasLocation) "\n" + getString(R.string.order_location_line,
+            String.format(java.util.Locale.US, "%.5f, %.5f", order.latitude, order.longitude)) else ""
         val builder = MaterialAlertDialogBuilder(ctx)
             .setTitle(getString(R.string.order_number, order.id) + " · " + order.status.label)
             .setMessage(message)
             .setPositiveButton(R.string.action_close, null)
+        if (order.hasLocation) builder.setNeutralButton(R.string.order_view_map) { _, _ -> ctx.openOrderMap(order) }
         when (order.status) {
             OrderStatus.PAID, OrderStatus.PENDING_PAYMENT -> builder.setNegativeButton(R.string.order_cancel) { _, _ ->
                 ctx.confirm(getString(R.string.order_cancel), getString(R.string.order_cancel_message), getString(R.string.order_cancel)) {

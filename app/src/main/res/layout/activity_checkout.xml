@@ -84,6 +84,16 @@
                         android:text="@string/checkout_location_purpose"
                         android:textAppearance="@style/TextAppearance.RSaldos.Caption" />
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnOpenMap"
+                        style="@style/Widget.RSaldos.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/checkout_open_map"
+                        android:visibility="gone"
+                        app:icon="@drawable/ic_location"
+                        app:iconGravity="textStart" />
+
                     <RadioGroup
                         android:id="@+id/rgDelivery"
                         android:layout_width="match_parent"
@@ -123,35 +133,12 @@
                         android:text="@string/checkout_step_payment"
                         android:textAppearance="@style/TextAppearance.RSaldos.Subtitle" />
 
-                    <RadioGroup
-                        android:id="@+id/rgPayment"
+                    <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="@dimen/space_s"
-                        android:orientation="horizontal">
-
-                        <com.google.android.material.radiobutton.MaterialRadioButton
-                            android:id="@+id/rbCard"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:checked="true"
-                            android:text="@string/pay_card" />
-
-                        <com.google.android.material.radiobutton.MaterialRadioButton
-                            android:id="@+id/rbPse"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/pay_pse" />
-
-                        <com.google.android.material.radiobutton.MaterialRadioButton
-                            android:id="@+id/rbNequi"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:text="@string/pay_nequi" />
-                    </RadioGroup>
+                        android:text="@string/checkout_epayco_info"
+                        android:textAppearance="@style/TextAppearance.RSaldos.Body" />
 
                     <TextView
                         android:layout_width="match_parent"
@@ -166,90 +153,12 @@
                         app:drawableStartCompat="@drawable/ic_lock"
                         app:drawableTint="@color/rs_orange" />
 
-                    <LinearLayout
-                        android:id="@+id/layoutCard"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical">
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/tilCardNumber"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/space_m"
-                            android:hint="@string/field_card_number"
-                            app:helperText="@string/checkout_card_hint"
-                            app:startIconDrawable="@drawable/ic_credit_card">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/etCardNumber"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="number"
-                                android:maxLength="19" />
-                        </com.google.android.material.textfield.TextInputLayout>
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/space_s"
-                            android:orientation="horizontal">
-
-                            <com.google.android.material.textfield.TextInputLayout
-                                android:id="@+id/tilExpiry"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_marginEnd="@dimen/space_s"
-                                android:layout_weight="1"
-                                android:hint="@string/field_expiry">
-
-                                <com.google.android.material.textfield.TextInputEditText
-                                    android:id="@+id/etExpiry"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:inputType="text"
-                                    android:maxLength="5" />
-                            </com.google.android.material.textfield.TextInputLayout>
-
-                            <com.google.android.material.textfield.TextInputLayout
-                                android:id="@+id/tilCvv"
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:hint="@string/field_cvv"
-                                app:endIconMode="password_toggle">
-
-                                <com.google.android.material.textfield.TextInputEditText
-                                    android:id="@+id/etCvv"
-                                    android:layout_width="match_parent"
-                                    android:layout_height="wrap_content"
-                                    android:inputType="numberPassword"
-                                    android:maxLength="4" />
-                            </com.google.android.material.textfield.TextInputLayout>
-                        </LinearLayout>
-
-                        <com.google.android.material.textfield.TextInputLayout
-                            android:id="@+id/tilCardName"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="@dimen/space_s"
-                            android:hint="@string/field_card_name">
-
-                            <com.google.android.material.textfield.TextInputEditText
-                                android:id="@+id/etCardName"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:inputType="textCapCharacters" />
-                        </com.google.android.material.textfield.TextInputLayout>
-                    </LinearLayout>
-
                     <TextView
-                        android:id="@+id/tvAltPayment"
+                        android:id="@+id/tvEpaycoMode"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="@dimen/space_m"
-                        android:textAppearance="@style/TextAppearance.RSaldos.Body"
-                        android:visibility="gone" />
+                        android:layout_marginTop="@dimen/space_s"
+                        android:textAppearance="@style/TextAppearance.RSaldos.Caption" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

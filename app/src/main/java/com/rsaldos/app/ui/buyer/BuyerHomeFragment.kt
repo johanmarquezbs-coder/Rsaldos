@@ -1,5 +1,6 @@
 package com.rsaldos.app.ui.buyer
 
+import com.rsaldos.app.ui.common.Refreshable
 import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
@@ -18,7 +19,8 @@ import com.rsaldos.app.ui.common.addChip
 import com.rsaldos.app.ui.common.checkedTag
 import com.rsaldos.app.ui.common.toast
 
-class BuyerHomeFragment : Fragment() {
+/** Inicio del comprador: dirección de entrega, promociones, categorías y ofertas destacadas. */
+class BuyerHomeFragment : Fragment(), Refreshable {
     private var _binding: FragmentBuyerHomeBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: ProductGridAdapter
@@ -51,7 +53,8 @@ class BuyerHomeFragment : Fragment() {
         refresh()
     }
 
-    private fun refresh() {
+    /** Vuelve a leer los datos sincronizados con Firestore y redibuja la pantalla. */
+    override fun refresh() {
         val category = binding.chipCategories.checkedTag() as? Category
         val list = Repository.publishedProducts()
             .filter { category == null || it.category == category }
@@ -59,11 +62,13 @@ class BuyerHomeFragment : Fragment() {
         adapter.submit(list)
     }
 
+    /** Abre el detalle del producto. */
     private fun openDetail(product: Product) {
         startActivity(Intent(requireContext(), ProductDetailActivity::class.java)
             .putExtra(ProductDetailActivity.EXTRA_ID, product.id))
     }
 
+    /** Agrega una unidad al carrito. */
     private fun addToCart(product: Product) {
         if (Repository.addToCart(product)) {
             requireContext().toast(getString(R.string.cart_added, product.title))
