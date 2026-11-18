@@ -10,3 +10,4 @@
 .cxx
 /dist/
 *.apk
+build_log.txt

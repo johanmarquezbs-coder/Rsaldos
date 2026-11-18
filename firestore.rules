@@ -1,0 +1,74 @@
+rules_version = '2';
+
+// Reglas de seguridad de Cloud Firestore para R-Saldos.
+// Publicar con: firebase deploy --only firestore:rules  (o copiar en Consola > Firestore > Reglas).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isActive() { return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && me().status == 'ACTIVE'; }
+    function isAdmin() { return isActive() && me().role == 'ADMIN'; }
+    function isSeller() { return isActive() && me().role == 'SELLER'; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // Perfiles. Cada usuario lee y edita el suyo; el administrador gestiona todos.
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Registro: el propio usuario crea su perfil como comprador activo o vendedor pendiente.
+      // La cuenta admin@rsaldos.co (demostración) puede crear su perfil de administrador.
+      allow create: if isAdmin() || (signedIn() && request.auth.uid == uid && (
+        (request.resource.data.role == 'BUYER' && request.resource.data.status == 'ACTIVE') ||
+        (request.resource.data.role == 'SELLER' && request.resource.data.status == 'PENDING') ||
+        (request.auth.token.email in ['vendedor@rsaldos.co'] && request.resource.data.role == 'SELLER') ||
+        (request.auth.token.email in ['admin@rsaldos.co'] && request.resource.data.role == 'ADMIN')
+      ));
+
+      // El usuario no puede cambiarse el rol ni reactivarse; sí puede pedir su eliminación.
+      allow update: if isAdmin() || (signedIn() && request.auth.uid == uid &&
+        request.resource.data.role == resource.data.role &&
+        (request.resource.data.status == resource.data.status || request.resource.data.status == 'DELETED'));
+
+      allow delete: if isAdmin();
+
+      // Carrito del comprador.
+      match /cart/{productId} {
+        allow read, write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Catálogo. Cualquier usuario autenticado lo lee; el vendedor gestiona sus productos.
+    match /products/{productId} {
+      allow read: if signedIn();
+      allow create: if isAdmin() || (isSeller() && request.resource.data.sellerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isSeller() && resource.data.sellerId == request.auth.uid && request.resource.data.sellerId == request.auth.uid)
+        // El comprador solo puede descontar inventario al confirmar un pago aprobado.
+        || (isActive() && changed().hasOnly(['stock']) && request.resource.data.stock <= resource.data.stock);
+      allow delete: if isAdmin() || (isSeller() && resource.data.sellerId == request.auth.uid);
+    }
+
+    // Pedidos. Comprador: los suyos. Vendedor: los que incluyen sus productos. Admin: todos.
+    match /orders/{orderId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.buyerId == request.auth.uid)
+        || (signedIn() && request.auth.uid in resource.data.sellerIds);
+      allow create: if isActive() && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.status == 'PENDING_PAYMENT';
+      allow update: if isAdmin()
+        || (signedIn() && resource.data.buyerId == request.auth.uid &&
+            changed().hasOnly(['status', 'paymentRef', 'transactionId', 'paymentMethod', 'paymentResponse']))
+        || (signedIn() && request.auth.uid in resource.data.sellerIds &&
+            changed().hasOnly(['status', 'carrier', 'tracking']));
+      allow delete: if false;
+    }
+
+    // Bitácora de auditoría: se escribe pero no se edita ni se borra; solo el admin la lee.
+    match /audit/{eventId} {
+      allow create: if signedIn() && request.resource.data.actorId == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+  }
+}
