@@ -2,83 +2,94 @@
 
 Tienda virtual Android de tecnología reacondicionada y de liquidación: celulares, computadores, tabletas y accesorios con condición, grado estético, garantía y defectos visibles antes de pagar.
 
-Proyecto del curso **Desarrollo de Aplicaciones Móviles Nativas** — Ingeniería de Software.
+Proyecto final del curso **Desarrollo de Aplicaciones Móviles Nativas** — Ingeniería de Software.
 Autor: Johan Sebastián Márquez Bonilla.
+
+## Qué hace (versión 2.0)
+
+| Componente | Implementación |
+|---|---|
+| Autenticación | Firebase Authentication: registro, inicio y cierre de sesión, recuperación por correo y cambio de contraseña para Comprador, Vendedor y Administrador |
+| Huella dactilar | `BiometricPrompt` + credenciales cifradas con Android Keystore (`EncryptedSharedPreferences`) |
+| CRUD de usuarios | Administrador: crear (sin perder su sesión), editar, aprobar, bloquear y eliminar (lógico) en Firestore |
+| CRUD de productos | Vendedor y Administrador; fotos desde cámara o galería subidas a Firebase Storage |
+| Carrito y órdenes | `users/{uid}/cart` y `orders` en Firestore, con historial y estados de despacho |
+| Geolocalización | Fused Location Provider + Geocoder; coordenadas guardadas en el pedido y visibles en Google Maps |
+| Pasarela de pagos | Checkout de ePayco en WebView + validación de la transacción por `ref_payco` |
 
 ## Tecnologías
 
-- Kotlin 1.9.24 y Android SDK 34 (mínimo API 26)
-- Layouts XML, Material Components 3, ConstraintLayout, RecyclerView y ViewBinding
-- DrawerLayout + BottomNavigationView por rol
-- Biometría con `androidx.biometric` (BiometricPrompt)
-- Gradle 8.7 con Android Gradle Plugin 8.5.2
+- Kotlin 1.9.24, Android SDK 34 (mínimo API 26), Gradle 8.7, AGP 8.5.2
+- Layouts XML, Material Components 3, ViewBinding, RecyclerView, DrawerLayout + BottomNavigationView
+- Firebase BoM 33.1.2 (Auth, Firestore, Storage), Kotlin Coroutines
+- Google Play Services Location 21.3.0, Coil 2.6 (imágenes)
+- androidx.biometric 1.1.0, androidx.security-crypto 1.0.0
+- ePayco Checkout (checkout.js) y API de validación
 - Docker para compilar el APK sin instalar el SDK
 
-## Pantallas por rol
+## Configuración
 
-| Rol | Pantallas |
-|---|---|
-| Todos | Splash, inicio de sesión con huella, registro, recuperación de contraseña, menú lateral y barra inferior |
-| Comprador | Inicio, catálogo con filtros, detalle de producto, carrito, entrega y pasarela de pagos, resultado del pago, mis pedidos y perfil |
-| Vendedor | Panel, CRUD de productos con cámara, pedidos recibidos con despacho y perfil de vendedor |
-| Administrador | Dashboard, gestión de usuarios (listado, creación, edición y eliminación), gestión de productos, pagos y conciliación, reporte de ventas y auditoría |
+### 1. Firebase
+
+1. Crear un proyecto en <https://console.firebase.google.com> y registrar una app Android con el paquete `com.rsaldos.app`.
+2. Descargar `google-services.json` en la carpeta `app/`.
+3. **Authentication** → Método de acceso → activar *Correo electrónico/contraseña* (Plantillas → idioma español).
+4. **Firestore Database** → crear la base de datos y publicar las reglas de `firestore.rules`.
+5. **Storage** → empezar y publicar las reglas de `storage.rules` (los proyectos nuevos requieren el plan Blaze; el uso de la app cabe en la capa gratuita).
+
+Con Firebase CLI: `firebase deploy --only firestore:rules,storage`.
+
+Sin `google-services.json` el proyecto compila igual, pero la app muestra al abrir cómo configurarlo.
+
+### 2. ePayco
+
+En `gradle.properties`:
+
+```properties
+EPAYCO_PUBLIC_KEY=<PUBLIC_KEY del comercio>   # Dashboard ePayco > Configuración > Llaves secretas
+EPAYCO_TEST=true                              # entorno de pruebas, no cobra dinero real
+```
+
+Por defecto trae la llave pública de demostración que publica ePayco en su documentación.
 
 ## Cuentas de prueba
+
+Se crean solas la primera vez que se usan (y el vendedor carga un catálogo de 10 productos):
 
 | Rol | Correo | Contraseña |
 |---|---|---|
 | Comprador | comprador@rsaldos.co | Comprador123 |
 | Vendedor | vendedor@rsaldos.co | Vendedor123 |
-| Administrador | admin@rsaldos.co | Admin123 (código MFA 246810) |
+| Administrador | admin@rsaldos.co | Admin123 (código de verificación 246810) |
 
-- Código de recuperación de contraseña: `135790`
-- Tarjeta aprobada: `4242 4242 4242 4242` · tarjeta rechazada: `4000 0000 0000 0002`
+## Cómo compilar
 
-Los datos son ficticios y viven en memoria; se reinician al cerrar la app.
-
-## Cómo ejecutarlo
-
-**Android Studio:** abrir la carpeta del proyecto, esperar la sincronización de Gradle y ejecutar en un emulador o celular.
-
-**Línea de comandos:**
-
-```bash
-./gradlew assembleDebug        # Windows: gradlew.bat assembleDebug
-```
-
-El APK queda en `app/build/outputs/apk/debug/app-debug.apk`.
-
-**Docker** (no necesita el SDK instalado):
-
-```bash
-docker compose up -d --build
-```
-
-Abre http://localhost:8095 para descargar el APK. Para sacar solo el archivo:
-
-```bash
-docker build --target export --output dist .
-```
+| Opción | Comando | APK |
+|---|---|---|
+| Android Studio | Abrir la carpeta, sincronizar Gradle y ejecutar | Se instala en el emulador o celular |
+| Línea de comandos | `./gradlew assembleDebug` (Windows: `gradlew.bat assembleDebug`) | `app/build/outputs/apk/debug/app-debug.apk` |
+| Docker | `docker build --target export --output dist .` (o doble clic en `compilar_rsaldos.bat`) | `dist/rsaldos-debug.apk` |
 
 ## Estructura
 
 ```
 app/src/main/
 ├── java/com/rsaldos/app/
-│   ├── data/        modelos, repositorio en memoria y sesión
+│   ├── RSaldosApp.kt      inicialización de Firebase
+│   ├── data/              modelos, Repository (Firestore), AuthService, CredentialStore,
+│   │                      StorageService, LocationService, EpaycoService, DemoSeeder
 │   └── ui/
-│       ├── auth/    splash, login, registro y recuperación
-│       ├── buyer/   pantallas del comprador
-│       ├── seller/  pantallas del vendedor
-│       ├── admin/   pantallas del administrador
-│       └── common/  navegación por rol, perfil, biometría y adaptadores
-└── res/
-    ├── layout/      activities, fragments, ítems y diálogos
-    ├── values/      colors, dimens, strings, styles y themes
-    ├── drawable/    íconos vectoriales y fondos
-    ├── color/       selectores de color
-    └── menu/        menús Drawer y Bottom Navigation por rol
+│       ├── auth/          splash, login con huella, registro y recuperación
+│       ├── buyer/         inicio, catálogo, detalle, carrito, checkout, ePayco, pedidos
+│       ├── seller/        panel, productos con cámara/galería, pedidos y despachos
+│       ├── admin/         dashboard, usuarios, productos, pagos, ventas y auditoría
+│       └── common/        navegación por rol, perfil, biometría, adaptadores y utilidades
+└── res/                   layouts, valores, íconos y menús por rol
+firestore.rules            reglas de seguridad de Firestore
+storage.rules              reglas de seguridad de Storage
 ```
+
+Cada clase y método relevante tiene comentarios KDoc que explican su propósito y su lógica.
 
 ## Ramas
 
