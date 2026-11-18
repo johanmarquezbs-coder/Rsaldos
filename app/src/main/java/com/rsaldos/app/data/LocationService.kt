@@ -54,11 +54,23 @@ class LocationService(private val context: Context) {
     suspend fun capture(): Fix? {
         val location = currentLocation() ?: return null
         val address = reverseGeocode(location.latitude, location.longitude)
-        val street = address?.let { a ->
-            listOfNotNull(a.thoroughfare, a.subThoroughfare).joinToString(" # ").ifBlank { a.getAddressLine(0) }
-        }
+        val street = address?.let { a -> formatStreet(a) }
         val city = address?.locality ?: address?.subAdminArea ?: address?.adminArea
         return Fix(location.latitude, location.longitude, street, city)
+    }
+
+    /**
+     * Arma la dirección al estilo colombiano ("Calle 93A # 13-24"). Si el Geocoder ya trae el
+     * número con "#", no se repite; si falta la calle, usa la primera línea de la dirección.
+     */
+    private fun formatStreet(a: Address): String? {
+        val street = a.thoroughfare?.trim()?.removeSuffix("#")?.trim().orEmpty()
+        val number = a.subThoroughfare?.trim()?.removePrefix("#")?.trim().orEmpty()
+        return when {
+            street.isNotEmpty() && number.isNotEmpty() -> "$street # $number"
+            street.isNotEmpty() -> street
+            else -> a.getAddressLine(0)?.substringBefore(",")
+        }
     }
 
     /** Geocodificación inversa: coordenadas → dirección (en un hilo de entrada/salida). */

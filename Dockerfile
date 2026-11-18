@@ -29,7 +29,7 @@ RUN wget -q https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-b
 WORKDIR /workspace
 
 COPY settings.gradle.kts build.gradle.kts gradle.properties ./
-COPY app/build.gradle.kts app/proguard-rules.pro app/google-services.jso[n] app/
+COPY app/build.gradle.kts app/proguard-rules.pro app/debug.keystore app/google-services.jso[n] app/
 RUN gradle --no-daemon -q :app:dependencies > /dev/null || true
 
 COPY app/src app/src

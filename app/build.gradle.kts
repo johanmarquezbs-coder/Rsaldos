@@ -36,6 +36,17 @@ android {
         buildConfigField("boolean", "EPAYCO_TEST", prop("EPAYCO_TEST", "true"))
     }
 
+    // Firma de depuración fija (app/debug.keystore) para que cada compilación, incluida la de
+    // Docker, produzca un APK que se pueda instalar encima del anterior sin desinstalarlo.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

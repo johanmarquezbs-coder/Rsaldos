@@ -43,7 +43,8 @@ data class EpaycoTransaction(
 /**
  * Integración con la pasarela de pagos ePayco (Colombia).
  *
- * 1. [checkoutHtml] arma una página con el Checkout de ePayco (checkout.js) que se abre en un
+ * 1. [checkoutHtml] arma una página con el Checkout estándar de ePayco (checkout.js, versión
+ *    clásica por llave pública) que se abre en un
  *    WebView: el comprador escribe los datos de su tarjeta, PSE o billetera directamente en el
  *    entorno certificado de ePayco, así la app nunca recibe datos de tarjeta.
  * 2. Al terminar, ePayco redirige a [RESPONSE_URL] con el parámetro `ref_payco`; el WebView
@@ -81,10 +82,19 @@ object EpaycoService {
             <body>
               <div class="dot"></div>
               <p id="msg">Abriendo la pasarela segura de ePayco…</p>
-              <button id="retry" style="display:none" onclick="start()">Reintentar</button>
-              <script src="https://checkout.epayco.co/checkout.js"></script>
+              <button id="retry" style="display:none" onclick="start(0)">Reintentar</button>
+              <script src="https://checkout.epayco.co/checkout.js?version=v1"></script>
               <script>
-                function start(){
+                // El script de ePayco se inicializa de forma asíncrona: se espera hasta 15 s a que
+                // ePayco.checkout esté disponible antes de abrir el checkout.
+                function start(intentos){
+                  intentos = intentos || 0;
+                  if (!(window.ePayco && window.ePayco.checkout && window.ePayco.checkout.configure)) {
+                    if (intentos < 75) { setTimeout(function(){ start(intentos + 1); }, 200); return; }
+                    document.getElementById('msg').innerText = 'No se pudo cargar ePayco. Revise su conexión.';
+                    document.getElementById('retry').style.display = 'inline-block';
+                    return;
+                  }
                   try {
                     var handler = ePayco.checkout.configure({ key: ${q(BuildConfig.EPAYCO_PUBLIC_KEY)}, test: ${BuildConfig.EPAYCO_TEST} });
                     handler.open({
@@ -109,7 +119,7 @@ object EpaycoService {
                     document.getElementById('retry').style.display = 'inline-block';
                   }
                 }
-                window.onload = start;
+                window.onload = function(){ start(0); };
               </script>
             </body></html>
         """.trimIndent()
