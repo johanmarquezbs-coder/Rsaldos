@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "91415250375",
+    "project_id": "r-saldos",
+    "storage_bucket": "r-saldos.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:91415250375:android:ed27d87e97b2d6d34ec5e2",
+        "android_client_info": {
+          "package_name": "com.rsaldos.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA-9g5FEEbzNZ2xxpVtuzlsrPI3rBEFdeo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
