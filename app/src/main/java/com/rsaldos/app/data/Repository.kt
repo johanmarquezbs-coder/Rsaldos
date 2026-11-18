@@ -1,99 +1,285 @@
 package com.rsaldos.app.data
 
+import android.util.Log
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CopyOnWriteArraySet
 
+/**
+ * Repositorio central de datos de R-Saldos sobre Cloud Firestore.
+ *
+ * Funciona como una caché en memoria que se mantiene sincronizada en tiempo real con
+ * Firestore mediante *snapshot listeners*. Las pantallas leen la caché de forma síncrona
+ * (listas siempre actualizadas) y se suscriben con [addObserver] para refrescarse cada vez
+ * que llega un cambio desde la nube. Las escrituras van directo a Firestore; gracias a la
+ * compensación de latencia del SDK, los listeners reciben el cambio local de inmediato.
+ *
+ * Colecciones:
+ * - `users/{uid}`: perfiles; subcolección `cart/{productId}` con el carrito de cada comprador.
+ * - `products/{id}`: catálogo e inventario.
+ * - `orders/{id}`: pedidos con líneas, dirección, coordenadas GPS y datos de pago.
+ * - `audit/{id}`: bitácora de acciones relevantes.
+ *
+ * Los listeners que se abren dependen del rol, para que cada usuario solo descargue los
+ * documentos que las reglas de seguridad le permiten leer.
+ */
 object Repository {
+    private const val TAG = "Repository"
+    const val USERS = "users"
+    const val PRODUCTS = "products"
+    const val ORDERS = "orders"
+    const val AUDIT = "audit"
+    const val CART = "cart"
+
+    /** Código del segundo factor del administrador (demostración de MFA). */
+    const val DEMO_MFA_CODE = "246810"
+
+    /** Costo fijo del envío estándar en pesos colombianos. */
+    const val SHIPPING_COST = 12_000L
+
+    private val db: FirebaseFirestore get() = FirebaseFirestore.getInstance()
+
     private val users = mutableListOf<User>()
     private val products = mutableListOf<Product>()
     private val orders = mutableListOf<Order>()
     private val audit = mutableListOf<AuditEvent>()
+    private val cartQuantities = linkedMapOf<String, Int>()
+
+    /** Carrito del comprador actual, reconstruido a partir de Firestore y del catálogo. */
     val cart = mutableListOf<CartItem>()
 
-    private var nextUserId = 100
-    private var nextProductId = 100
-    private var nextOrder = 2051
+    /** Perfil del usuario con sesión iniciada; null si no hay sesión. */
+    var me: User? = null
+        private set
 
-    const val DEMO_MFA_CODE = "246810"
-    const val DEMO_RECOVERY_CODE = "135790"
-    const val SHIPPING_COST = 12_000L
+    private val registrations = mutableListOf<ListenerRegistration>()
+    private val observers = CopyOnWriteArraySet<() -> Unit>()
 
-    init {
-        seed()
+    /** Se invoca cuando el administrador bloquea o elimina la cuenta con la sesión abierta. */
+    var onSessionRevoked: ((UserStatus) -> Unit)? = null
+
+    /** Indica si Firebase quedó inicializado (requiere app/google-services.json). */
+    fun isFirebaseReady(context: android.content.Context): Boolean = FirebaseApp.getApps(context).isNotEmpty()
+
+    // ---------------------------------------------------------------------------------------
+    // Sincronización en tiempo real
+    // ---------------------------------------------------------------------------------------
+
+    /** Registra una función que se ejecuta cada vez que cambia algún dato de la caché. */
+    fun addObserver(observer: () -> Unit) {
+        observers.add(observer)
     }
 
-    fun login(email: String, password: String): User? =
-        users.firstOrNull {
-            it.email.equals(email.trim(), ignoreCase = true) && it.password == password &&
-                it.status != UserStatus.DELETED
+    /** Elimina un observador registrado con [addObserver]. */
+    fun removeObserver(observer: () -> Unit) {
+        observers.remove(observer)
+    }
+
+    /** Notifica a todas las pantallas suscritas que hay datos nuevos. */
+    private fun changed() = observers.forEach { it() }
+
+    /** Lee una vez el perfil de un usuario desde Firestore. */
+    suspend fun fetchProfile(uid: String): User? {
+        val doc = db.collection(USERS).document(uid).get().await()
+        return if (doc.exists()) doc.toUser() else null
+    }
+
+    /**
+     * Abre los listeners de Firestore para el usuario que acaba de iniciar sesión.
+     * Comprador: su perfil, carrito, catálogo y sus pedidos. Vendedor: perfil, catálogo y
+     * pedidos que incluyen sus productos. Administrador: todo, más usuarios y auditoría.
+     */
+    fun start(user: User) {
+        stop()
+        me = user
+        val uid = user.id
+
+        registrations += db.collection(USERS).document(uid).addSnapshotListener { snap, error ->
+            if (error != null) { Log.w(TAG, "perfil", error); return@addSnapshotListener }
+            if (snap == null || !snap.exists()) return@addSnapshotListener
+            val updated = snap.toUser()
+            me = updated
+            replaceUser(updated)
+            changed()
+            if (updated.status == UserStatus.BLOCKED || updated.status == UserStatus.DELETED) {
+                onSessionRevoked?.invoke(updated.status)
+            }
         }
 
-    fun findUserByEmail(email: String): User? =
-        users.firstOrNull { it.email.equals(email.trim(), ignoreCase = true) && it.status != UserStatus.DELETED }
+        registrations += db.collection(PRODUCTS).addSnapshotListener { snap, error ->
+            if (error != null) { Log.w(TAG, "productos", error); return@addSnapshotListener }
+            products.clear()
+            snap?.documents?.forEach { products += it.toProduct() }
+            products.sortBy { it.title }
+            rebuildCart()
+            changed()
+        }
 
-    fun findUser(id: Int): User? = users.firstOrNull { it.id == id }
+        val ordersQuery: Query = when (user.role) {
+            Role.BUYER -> db.collection(ORDERS).whereEqualTo("buyerId", uid)
+            Role.SELLER -> db.collection(ORDERS).whereArrayContains("sellerIds", uid)
+            Role.ADMIN -> db.collection(ORDERS)
+        }
+        registrations += ordersQuery.addSnapshotListener { snap, error ->
+            if (error != null) { Log.w(TAG, "pedidos", error); return@addSnapshotListener }
+            orders.clear()
+            snap?.documents?.forEach { orders += it.toOrder() }
+            changed()
+        }
 
-    fun emailExists(email: String, exceptId: Int = -1): Boolean =
-        users.any { it.email.equals(email.trim(), ignoreCase = true) && it.id != exceptId && it.status != UserStatus.DELETED }
+        if (user.role == Role.BUYER) {
+            registrations += cartRef(uid).addSnapshotListener { snap, error ->
+                if (error != null) { Log.w(TAG, "carrito", error); return@addSnapshotListener }
+                cartQuantities.clear()
+                snap?.documents?.forEach { doc ->
+                    cartQuantities[doc.id] = (doc.getLong("quantity") ?: 0L).toInt()
+                }
+                rebuildCart()
+                changed()
+            }
+        }
 
-    fun allUsers(): List<User> = users.filter { it.status != UserStatus.DELETED }
-
-    fun register(
-        name: String, email: String, password: String, document: String, phone: String,
-        role: Role, marketing: Boolean
-    ): User {
-        val status = if (role == Role.SELLER) UserStatus.PENDING else UserStatus.ACTIVE
-        val user = User(
-            nextUserId++, name, email.trim(), password, document, phone, role, status,
-            marketingConsent = marketing, createdAt = today()
-        )
-        users.add(user)
-        log(name, "Registro de cuenta", "Rol ${role.label} · estado ${status.label}", AuditType.USERS)
-        return user
+        if (user.role == Role.ADMIN) {
+            registrations += db.collection(USERS).addSnapshotListener { snap, error ->
+                if (error != null) { Log.w(TAG, "usuarios", error); return@addSnapshotListener }
+                users.clear()
+                snap?.documents?.forEach { users += it.toUser() }
+                users.sortBy { it.name }
+                changed()
+            }
+            registrations += db.collection(AUDIT).orderBy("createdAt", Query.Direction.DESCENDING).limit(300)
+                .addSnapshotListener { snap, error ->
+                    if (error != null) { Log.w(TAG, "auditoria", error); return@addSnapshotListener }
+                    audit.clear()
+                    snap?.documents?.forEach { audit += it.toAuditEvent() }
+                    changed()
+                }
+        } else {
+            users.clear()
+            users += user
+        }
     }
 
-    fun createUser(actor: User, user: User): User {
-        val created = user.copy(id = nextUserId++, createdAt = today())
-        users.add(created)
+    /** Cierra todos los listeners y limpia la caché (al cerrar sesión). */
+    fun stop() {
+        registrations.forEach { it.remove() }
+        registrations.clear()
+        users.clear(); products.clear(); orders.clear(); audit.clear()
+        cartQuantities.clear(); cart.clear()
+        me = null
+    }
+
+    /** Reemplaza un usuario en la caché o lo agrega si no existe. */
+    private fun replaceUser(user: User) {
+        val index = users.indexOfFirst { it.id == user.id }
+        if (index >= 0) users[index] = user else users += user
+    }
+
+    /** Une las cantidades del carrito con los productos del catálogo cargado. */
+    private fun rebuildCart() {
+        cart.clear()
+        cartQuantities.forEach { (productId, qty) ->
+            products.firstOrNull { it.id == productId }?.let { cart += CartItem(it, qty) }
+        }
+    }
+
+    /** Subcolección del carrito de un usuario. */
+    private fun cartRef(uid: String) = db.collection(USERS).document(uid).collection(CART)
+
+    // ---------------------------------------------------------------------------------------
+    // Usuarios (CRUD del administrador y perfil propio)
+    // ---------------------------------------------------------------------------------------
+
+    /** Busca un usuario en la caché. */
+    fun findUser(id: String): User? = users.firstOrNull { it.id == id } ?: me?.takeIf { it.id == id }
+
+    /** Indica si el correo ya está registrado en otra cuenta no eliminada. */
+    fun emailExists(email: String, exceptId: String = ""): Boolean =
+        users.any { it.email.equals(email.trim(), ignoreCase = true) && it.id != exceptId && it.status != UserStatus.DELETED }
+
+    /** Usuarios visibles para el administrador (excluye los eliminados lógicamente). */
+    fun allUsers(): List<User> = users.filter { it.status != UserStatus.DELETED }
+
+    /** Guarda el perfil de un usuario nuevo en `users/{uid}` (registro o creación por el administrador). */
+    suspend fun saveNewProfile(user: User) {
+        db.collection(USERS).document(user.id).set(user.toMap()).await()
+    }
+
+    /**
+     * Crea un usuario desde el rol Administrador.
+     *
+     * Se usa una segunda instancia de FirebaseApp para crear la cuenta en Firebase
+     * Authentication sin cerrar la sesión del administrador; luego se guarda el perfil.
+     */
+    suspend fun createUser(actor: User, user: User, password: String): User {
+        val uid = AuthService.createAccountAsAdmin(user.email, password)
+        val created = user.copy(id = uid, createdAt = today())
+        saveNewProfile(created)
         log(actor.name, "Creó usuario", "${created.email} · ${created.role.label}", AuditType.USERS)
         return created
     }
 
+    /** Actualiza un usuario (edición, aprobación, bloqueo) y deja el motivo en la auditoría. */
     fun updateUser(actor: User, user: User, reason: String) {
-        val index = users.indexOfFirst { it.id == user.id }
-        if (index >= 0) users[index] = user
-        log(actor.name, "Editó usuario", "${user.email} · motivo: $reason", AuditType.USERS)
+        replaceUser(user)
+        db.collection(USERS).document(user.id).set(user.toMap(), SetOptions.merge())
+        log(actor.name, "Editó usuario", "${user.email} · ${user.status.label} · motivo: $reason", AuditType.USERS)
+        changed()
     }
 
+    /** Eliminación lógica: marca la cuenta como DELETED; la sesión abierta se cierra sola. */
     fun deleteUser(actor: User, user: User, reason: String) {
         user.status = UserStatus.DELETED
         user.openSessions = 0
+        db.collection(USERS).document(user.id)
+            .update(mapOf("status" to UserStatus.DELETED.name, "openSessions" to 0))
         log(actor.name, "Eliminó usuario (lógico)", "${user.email} · motivo: $reason", AuditType.USERS)
+        changed()
     }
 
-    fun changePassword(user: User, newPassword: String) {
-        user.password = newPassword
-        user.mustChangePassword = false
-        log(user.name, "Cambio de contraseña", "Por recuperación o perfil", AuditType.SECURITY)
+    /** Guarda los cambios que el propio usuario hace en su perfil. */
+    fun updateProfile(user: User, detail: String) {
+        replaceUser(user)
+        me = user
+        db.collection(USERS).document(user.id).set(user.toMap(), SetOptions.merge())
+        log(user.name, "Actualizó su perfil", detail, AuditType.USERS)
+        changed()
     }
 
-    fun product(id: Int): Product? = products.firstOrNull { it.id == id }
+    // ---------------------------------------------------------------------------------------
+    // Productos (CRUD del vendedor y del administrador)
+    // ---------------------------------------------------------------------------------------
 
+    /** Genera un id de documento nuevo para un producto (se usa también como carpeta en Storage). */
+    fun newProductId(): String = db.collection(PRODUCTS).document().id
+
+    /** Busca un producto en la caché. */
+    fun product(id: String): Product? = products.firstOrNull { it.id == id }
+
+    /** Todos los productos (administrador). */
     fun allProducts(): List<Product> = products.toList()
 
+    /** Productos visibles en el catálogo: publicados y con existencias. */
     fun publishedProducts(): List<Product> =
         products.filter { it.status == ProductStatus.PUBLISHED && it.stock > 0 }
 
-    fun productsOfSeller(sellerId: Int): List<Product> = products.filter { it.sellerId == sellerId }
+    /** Productos de un vendedor. */
+    fun productsOfSeller(sellerId: String): List<Product> = products.filter { it.sellerId == sellerId }
 
-    fun search(
-        query: String,
-        category: Category?,
-        grades: Set<Grade>,
-        maxPrice: Long?,
-        sort: Int
-    ): List<Product> {
+    /**
+     * Busca en el catálogo publicado por texto, categoría, grados y precio máximo.
+     * `sort`: 0 relevancia, 1 menor precio, 2 mayor precio, 3 mayor descuento.
+     */
+    fun search(query: String, category: Category?, grades: Set<Grade>, maxPrice: Long?, sort: Int): List<Product> {
         val q = query.trim().lowercase()
         var list = publishedProducts().filter { p ->
             (q.isEmpty() || p.title.lowercase().contains(q) || p.brand.lowercase().contains(q) ||
@@ -111,234 +297,287 @@ object Repository {
         return list
     }
 
-    fun saveProduct(actor: User, product: Product): Product {
-        val index = products.indexOfFirst { it.id == product.id }
-        return if (index >= 0) {
-            val old = products[index]
+    /**
+     * Crea o actualiza un producto. Si lo edita un vendedor vuelve a revisión; si lo crea el
+     * administrador queda publicado directamente.
+     */
+    suspend fun saveProduct(actor: User, product: Product): Product {
+        val old = product(product.id)
+        val saved = if (old != null) {
             if (actor.role == Role.SELLER) product.status = ProductStatus.REVIEW
-            products[index] = product
-            val detail = if (old.price != product.price) {
-                "${product.title} · precio ${Format.money(old.price)} → ${Format.money(product.price)}"
-            } else product.title
-            log(actor.name, "Editó producto", detail, AuditType.CATALOG)
             product
         } else {
-            val created = product.copy(
-                id = nextProductId++,
-                status = if (actor.role == Role.ADMIN) ProductStatus.PUBLISHED else ProductStatus.REVIEW
-            )
-            products.add(created)
-            log(actor.name, "Creó producto", created.title, AuditType.CATALOG)
-            created
+            product.copy(status = if (actor.role == Role.ADMIN) ProductStatus.PUBLISHED else ProductStatus.REVIEW)
         }
+        db.collection(PRODUCTS).document(saved.id).set(saved.toMap()).await()
+        val detail = if (old != null && old.price != saved.price) {
+            "${saved.title} · precio ${Format.money(old.price)} → ${Format.money(saved.price)}"
+        } else saved.title
+        log(actor.name, if (old != null) "Editó producto" else "Creó producto", detail, AuditType.CATALOG)
+        return saved
     }
 
+    /** Elimina el producto de Firestore, sus fotos de Storage y lo saca del carrito propio. */
     fun deleteProduct(actor: User, product: Product) {
         products.removeAll { it.id == product.id }
-        cart.removeAll { it.product.id == product.id }
+        db.collection(PRODUCTS).document(product.id).delete()
+        StorageService.deleteProductPhotos(product)
+        me?.let { if (it.role == Role.BUYER) cartRef(it.id).document(product.id).delete() }
+        rebuildCart()
         log(actor.name, "Eliminó producto", product.title, AuditType.CATALOG)
+        changed()
     }
 
+    /** El administrador aprueba la publicación. */
     fun approveProduct(actor: User, product: Product) {
         product.status = ProductStatus.PUBLISHED
         product.rejectReason = ""
+        db.collection(PRODUCTS).document(product.id)
+            .update(mapOf("status" to ProductStatus.PUBLISHED.name, "rejectReason" to ""))
         log(actor.name, "Aprobó publicación", product.title, AuditType.CATALOG)
+        changed()
     }
 
+    /** El administrador rechaza la publicación indicando el motivo. */
     fun rejectProduct(actor: User, product: Product, reason: String) {
         product.status = ProductStatus.REJECTED
         product.rejectReason = reason
+        db.collection(PRODUCTS).document(product.id)
+            .update(mapOf("status" to ProductStatus.REJECTED.name, "rejectReason" to reason))
         log(actor.name, "Rechazó publicación", "${product.title} · $reason", AuditType.CATALOG)
+        changed()
     }
 
+    /** Pausa o reanuda una publicación (al reanudar vuelve a revisión). */
     fun togglePause(actor: User, product: Product) {
         product.status = if (product.status == ProductStatus.PAUSED) ProductStatus.REVIEW else ProductStatus.PAUSED
+        db.collection(PRODUCTS).document(product.id).update("status", product.status.name)
         log(actor.name, "Cambió estado de publicación", "${product.title} → ${product.status.label}", AuditType.CATALOG)
+        changed()
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Carrito (CRUD en users/{uid}/cart)
+    // ---------------------------------------------------------------------------------------
+
+    /** Unidades en el carrito. */
     fun cartCount(): Int = cart.sumOf { it.quantity }
 
+    /** Subtotal del carrito sin envío. */
     fun cartTotal(): Long = cart.sumOf { it.subtotal }
 
+    /** Agrega unidades al carrito si hay existencias; devuelve false si se supera el stock. */
     fun addToCart(product: Product, quantity: Int = 1): Boolean {
-        val item = cart.firstOrNull { it.product.id == product.id }
-        val current = item?.quantity ?: 0
+        val uid = me?.id ?: return false
+        val current = cartQuantities[product.id] ?: 0
         if (current + quantity > product.stock) return false
-        if (item == null) cart.add(CartItem(product, quantity)) else item.quantity += quantity
+        cartQuantities[product.id] = current + quantity
+        rebuildCart()
+        cartRef(uid).document(product.id).set(
+            mapOf("productId" to product.id, "quantity" to current + quantity, "updatedAt" to FieldValue.serverTimestamp())
+        )
+        changed()
         return true
     }
 
+    /** Cambia la cantidad de una línea del carrito respetando el stock disponible. */
     fun updateQuantity(item: CartItem, quantity: Int): Boolean {
+        val uid = me?.id ?: return false
         if (quantity < 1 || quantity > item.product.stock) return false
         item.quantity = quantity
+        cartQuantities[item.product.id] = quantity
+        cartRef(uid).document(item.product.id).update("quantity", quantity)
+        changed()
         return true
     }
 
+    /** Elimina una línea del carrito. */
     fun removeFromCart(item: CartItem) {
-        cart.remove(item)
+        val uid = me?.id ?: return
+        cartQuantities.remove(item.product.id)
+        rebuildCart()
+        cartRef(uid).document(item.product.id).delete()
+        changed()
     }
 
-    fun clearCart() = cart.clear()
+    /** Vacía el carrito con una escritura en lote. */
+    fun clearCart() {
+        val uid = me?.id ?: return
+        val ids = cartQuantities.keys.toList()
+        cartQuantities.clear()
+        cart.clear()
+        val batch = db.batch()
+        ids.forEach { batch.delete(cartRef(uid).document(it)) }
+        batch.commit()
+        changed()
+    }
 
-    fun ordersOfBuyer(buyerId: Int): List<Order> = orders.filter { it.buyerId == buyerId }.sortedByDescending { it.id }
+    // ---------------------------------------------------------------------------------------
+    // Pedidos y pagos
+    // ---------------------------------------------------------------------------------------
 
-    fun ordersOfSeller(sellerId: Int): List<Order> =
-        orders.filter { o -> o.lines.any { it.sellerId == sellerId } }.sortedByDescending { it.id }
+    /** Pedidos de un comprador, del más reciente al más antiguo. */
+    fun ordersOfBuyer(buyerId: String): List<Order> =
+        orders.filter { it.buyerId == buyerId }.sortedByDescending { it.createdAt }
 
-    fun allOrders(): List<Order> = orders.sortedByDescending { it.id }
+    /** Pedidos que incluyen productos del vendedor. */
+    fun ordersOfSeller(sellerId: String): List<Order> =
+        orders.filter { o -> o.lines.any { it.sellerId == sellerId } }.sortedByDescending { it.createdAt }
 
+    /** Todos los pedidos (administrador). */
+    fun allOrders(): List<Order> = orders.sortedByDescending { it.createdAt }
+
+    /** Busca un pedido en la caché. */
     fun order(id: String): Order? = orders.firstOrNull { it.id == id }
 
-    fun checkout(buyer: User, address: String, method: String, result: PaymentResult): Order {
+    /** Consulta un pedido directamente en Firestore (por si aún no llegó a la caché). */
+    suspend fun fetchOrder(id: String): Order? {
+        val doc = db.collection(ORDERS).document(id).get().await()
+        return if (doc.exists()) doc.toOrder() else null
+    }
+
+    /**
+     * Crea el pedido en estado PENDING_PAYMENT con el contenido del carrito, la dirección y
+     * las coordenadas capturadas. El número de pedido se usa como factura (`invoice`) en ePayco.
+     */
+    suspend fun createPendingOrder(
+        buyer: User, address: String, latitude: Double?, longitude: Double?, shipping: Long
+    ): Order {
         val lines = cart.map {
-            OrderLine(it.product.id, it.product.title, it.product.category, it.product.grade, it.product.price, it.quantity, it.product.sellerId)
+            OrderLine(it.product.id, it.product.title, it.product.category, it.product.grade,
+                it.product.price, it.quantity, it.product.sellerId)
         }
-        val ref = "RS-PAY-" + (100000..999999).random()
-        val status = when (result) {
-            PaymentResult.APPROVED -> OrderStatus.PAID
-            PaymentResult.PENDING -> OrderStatus.PENDING_PAYMENT
-            PaymentResult.REJECTED -> OrderStatus.CANCELLED
-        }
-        val order = Order("RS-" + nextOrder++, buyer.id, lines, SHIPPING_COST, status, today(), address, method, ref)
-        orders.add(order)
-        if (result != PaymentResult.REJECTED) {
-            cart.forEach { it.product.stock = (it.product.stock - it.quantity).coerceAtLeast(0) }
-            cart.clear()
-        }
-        log(buyer.name, "Pago ${result.name.lowercase()}", "${order.id} · ${Format.money(order.total)} · $method", AuditType.PAYMENTS)
+        val now = System.currentTimeMillis()
+        val id = "RS-" + SimpleDateFormat("yyMMddHHmmss", Locale.US).format(Date(now)) + (10..99).random()
+        val order = Order(
+            id = id, buyerId = buyer.id, buyerName = buyer.name, buyerEmail = buyer.email,
+            lines = lines, shipping = shipping, status = OrderStatus.PENDING_PAYMENT,
+            date = today(), createdAt = now, address = address,
+            latitude = latitude, longitude = longitude, paymentMethod = "ePayco"
+        )
+        db.collection(ORDERS).document(id).set(order.toMap()).await()
+        log(buyer.name, "Creó pedido", "$id · ${Format.money(order.total)} · pago pendiente", AuditType.ORDERS)
         return order
     }
 
+    /**
+     * Registra la respuesta de ePayco sobre el pedido.
+     *
+     * Si la transacción fue aprobada, una transacción de Firestore descuenta el inventario y
+     * marca el pedido como PAID de forma atómica; luego se vacía el carrito. Si fue rechazada
+     * el pedido queda CANCELLED y si está pendiente sigue en PENDING_PAYMENT.
+     */
+    suspend fun confirmPayment(orderId: String, tx: EpaycoTransaction): Order? {
+        val orderRef = db.collection(ORDERS).document(orderId)
+        val result = tx.result
+        val paymentFields = mapOf(
+            "paymentRef" to tx.refPayco,
+            "transactionId" to tx.transactionId,
+            "paymentMethod" to tx.methodLabel,
+            "paymentResponse" to tx.responseText
+        )
+        if (result == PaymentResult.APPROVED) {
+            db.runTransaction { transaction ->
+                val snap = transaction.get(orderRef)
+                val order = snap.toOrder()
+                if (order.status != OrderStatus.PENDING_PAYMENT) return@runTransaction null
+                val productRefs = order.lines.map { db.collection(PRODUCTS).document(it.productId) }
+                val productSnaps = productRefs.map { transaction.get(it) }
+                order.lines.zip(productSnaps).forEach { (line, ps) ->
+                    if (ps.exists()) {
+                        val stock = (ps.getLong("stock") ?: 0L).toInt()
+                        transaction.update(ps.reference, "stock", (stock - line.quantity).coerceAtLeast(0))
+                    }
+                }
+                transaction.update(orderRef, paymentFields + ("status" to OrderStatus.PAID.name))
+                null
+            }.await()
+            clearCart()
+        } else {
+            val status = if (result == PaymentResult.REJECTED) OrderStatus.CANCELLED else OrderStatus.PENDING_PAYMENT
+            orderRef.update(paymentFields + ("status" to status.name)).await()
+        }
+        val updated = fetchOrder(orderId)
+        me?.let {
+            log(it.name, "Pago ${result.name.lowercase()}",
+                "$orderId · ref ePayco ${tx.refPayco} · ${Format.money(updated?.total ?: 0)}", AuditType.PAYMENTS)
+        }
+        return updated
+    }
+
+    /** El vendedor registra transportadora y guía y el pedido pasa a SHIPPED. */
     fun dispatchOrder(actor: User, order: Order, carrier: String, tracking: String) {
         order.carrier = carrier
         order.tracking = tracking
         order.status = OrderStatus.SHIPPED
+        db.collection(ORDERS).document(order.id).update(
+            mapOf("carrier" to carrier, "tracking" to tracking, "status" to OrderStatus.SHIPPED.name)
+        )
         log(actor.name, "Despachó pedido", "${order.id} · $carrier guía $tracking", AuditType.ORDERS)
+        changed()
     }
 
+    /** Cambia el estado de un pedido (alistamiento, entrega, cancelación). */
     fun setOrderStatus(actor: User, order: Order, status: OrderStatus) {
         order.status = status
+        db.collection(ORDERS).document(order.id).update("status", status.name)
         log(actor.name, "Cambió estado de pedido", "${order.id} → ${status.label}", AuditType.ORDERS)
+        changed()
     }
 
-    fun salesTotal(list: List<Order> = orders): Long =
-        list.filter { it.status != OrderStatus.CANCELLED && it.status != OrderStatus.PENDING_PAYMENT }.sumOf { it.total }
+    // ---------------------------------------------------------------------------------------
+    // Reportes
+    // ---------------------------------------------------------------------------------------
 
+    /** Total vendido (excluye pedidos cancelados y sin pagar). */
+    fun salesTotal(list: List<Order> = orders): Long = list.filter { isSale(it) }.sumOf { it.total }
+
+    /** Ventas agrupadas por categoría para las gráficas de barras. */
     fun salesByCategory(): Map<Category, Long> {
         val map = linkedMapOf<Category, Long>()
         Category.values().forEach { map[it] = 0L }
-        orders.filter { it.status != OrderStatus.CANCELLED && it.status != OrderStatus.PENDING_PAYMENT }
-            .flatMap { it.lines }
+        orders.filter { isSale(it) }.flatMap { it.lines }
             .forEach { map[it.category] = (map[it.category] ?: 0L) + it.subtotal }
         return map
     }
 
+    /** Los cinco productos más vendidos por unidades. */
     fun topProducts(): List<Pair<String, Int>> =
-        orders.filter { it.status != OrderStatus.CANCELLED }
-            .flatMap { it.lines }
+        orders.filter { isSale(it) }.flatMap { it.lines }
             .groupBy { it.title }
             .map { (title, lines) -> title to lines.sumOf { it.quantity } }
             .sortedByDescending { it.second }
             .take(5)
 
-    fun auditLog(): List<AuditEvent> = audit.reversed()
+    /** Eventos de auditoría, del más reciente al más antiguo. */
+    fun auditLog(): List<AuditEvent> = audit.toList()
 
+    /** Indica si el pedido se hizo dentro de los últimos `days` días. */
     fun inPeriod(order: Order, days: Int): Boolean {
-        val format = SimpleDateFormat("dd/MM/yyyy", Locale("es", "CO"))
-        val date = try { format.parse(order.date) } catch (e: Exception) { null } ?: return false
-        val today = format.parse(today()) ?: return false
-        val diffDays = (today.time - date.time) / (24L * 60 * 60 * 1000)
+        if (order.createdAt <= 0L) return false
+        val diffDays = (System.currentTimeMillis() - order.createdAt) / (24L * 60 * 60 * 1000)
         return diffDays in 0..days.toLong()
     }
 
+    /** Un pedido cuenta como venta cuando ya está pagado. */
     fun isSale(order: Order): Boolean =
         order.status != OrderStatus.CANCELLED && order.status != OrderStatus.PENDING_PAYMENT
 
+    // ---------------------------------------------------------------------------------------
+    // Auditoría
+    // ---------------------------------------------------------------------------------------
+
+    /** Escribe un evento en la bitácora `audit` (solo si hay una sesión de Firebase activa). */
     fun log(actor: String, action: String, detail: String, type: AuditType) {
-        audit.add(AuditEvent(now(), actor, action, detail, type))
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+        val event = AuditEvent(now(), actor, action, detail, type, System.currentTimeMillis())
+        db.collection(AUDIT).add(event.toMap(uid))
+            .addOnFailureListener { Log.w(TAG, "No se pudo registrar la auditoría", it) }
     }
 
+    /** Fecha actual en formato dd/MM/yyyy (Colombia). */
     fun today(): String = SimpleDateFormat("dd/MM/yyyy", Locale("es", "CO")).format(Date())
+
+    /** Fecha y hora actual para la auditoría. */
     private fun now(): String = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("es", "CO")).format(Date())
-
-    private fun seed() {
-        users += User(1, "Laura Gómez Ruiz", "comprador@rsaldos.co", "Comprador123", "CC 1.020.456.789", "300 456 7812",
-            Role.BUYER, UserStatus.ACTIVE, "Cra. 15 #93-40, apto 502", marketingConsent = true)
-        users += User(2, "Tecnosaldos Bogotá", "vendedor@rsaldos.co", "Vendedor123", "NIT 901.234.567-1", "601 745 2210",
-            Role.SELLER, UserStatus.ACTIVE, "Cl. 13 #8-20, local 104", storeName = "Tecnosaldos Bogotá")
-        users += User(3, "María Rojas", "admin@rsaldos.co", "Admin123", "CC 52.789.441", "310 222 9087",
-            Role.ADMIN, UserStatus.ACTIVE, "Oficina principal")
-        users += User(4, "Andrés Pérez", "andres.p@correo.com", "Andres123", "CC 80.112.334", "315 778 1020",
-            Role.BUYER, UserStatus.BLOCKED, "Cl. 80 #20-15")
-        users += User(5, "Celulares S.A.S.", "ventas@celulares.co", "Celulares123", "NIT 900.555.120-4", "604 333 1200",
-            Role.SELLER, UserStatus.PENDING, "Medellín", city = "Medellín", storeName = "Celulares S.A.S.")
-        users += User(6, "Juan Martínez", "juan.m@correo.com", "Juan1234", "CC 1.032.998.120", "301 998 4521",
-            Role.BUYER, UserStatus.ACTIVE, "Av. 68 #45-10")
-        users += User(7, "Sofía Herrera", "sofia.h@correo.com", "Sofia1234", "CC 1.019.554.230", "312 554 2301",
-            Role.BUYER, UserStatus.ACTIVE, "Cl. 140 #12-30")
-
-        val s = 2
-        products += Product(1, "Celular 128 GB, 8 GB RAM, grafito", "Samsung", Category.PHONES, Condition.REFURBISHED, Grade.A,
-            689_900, 1_150_000, 4, "356789104512345", 6, "Ninguno conocido",
-            "Batería 91 % · 32 pruebas superadas · borrado seguro certificado",
-            "Equipo reacondicionado con pantalla original, cargador incluido y caja genérica.", s, ProductStatus.PUBLISHED, rating = 4.7)
-        products += Product(2, "Portátil 14\" Core i5, 16 GB, SSD 512", "Lenovo", Category.LAPTOPS, Condition.REFURBISHED, Grade.B,
-            1_349_000, 2_199_000, 3, "PF3XK19A", 6, "Rayón leve en la tapa (ver foto 4)",
-            "Batería 88 % · teclado y puertos probados · Windows 11 limpio",
-            "Portátil corporativo reacondicionado, ideal para estudio y oficina.", s, ProductStatus.PUBLISHED, rating = 4.5)
-        products += Product(3, "Portátil 15.6\" Ryzen 7, 512 GB", "HP", Category.LAPTOPS, Condition.NEW_SURPLUS, Grade.A,
-            1_899_000, 2_590_000, 2, "5CD2349XYZ", 12, "Ninguno",
-            "Caja abierta · sin uso · 12 meses de garantía de fábrica",
-            "Saldo de importación, equipo nuevo con caja abierta.", s, ProductStatus.PUBLISHED, rating = 4.9)
-        products += Product(4, "Monitor 24\" Full HD IPS", "LG", Category.MONITORS, Condition.USED, Grade.A,
-            389_000, 690_000, 6, "LG24MK-88123", 3, "Ninguno",
-            "Sin píxeles muertos · cables HDMI incluidos",
-            "Monitor usado proveniente de renovación corporativa.", s, ProductStatus.PUBLISHED, rating = 4.4)
-        products += Product(5, "Portátil 13\" 8 GB (liquidación)", "Asus", Category.LAPTOPS, Condition.LIQUIDATION, Grade.C,
-            799_000, 1_499_000, 1, "ASX13-77812", 3, "Marcas visibles en carcasa y borde inferior",
-            "Funcional al 100 % · batería 79 %",
-            "Unidad de liquidación con defectos estéticos declarados.", s, ProductStatus.PUBLISHED, rating = 4.1)
-        products += Product(6, "Tableta 10\" 64 GB Wi-Fi", "Samsung", Category.TABLETS, Condition.REFURBISHED, Grade.B,
-            529_000, 849_000, 5, "R52T10-99821", 6, "Micro rayones en la pantalla",
-            "Batería 90 % · cámara y Wi-Fi probados",
-            "Tableta reacondicionada para estudio y entretenimiento.", s, ProductStatus.PUBLISHED, rating = 4.3)
-        products += Product(7, "Audífonos inalámbricos ANC", "Sony", Category.AUDIO, Condition.NEW_SURPLUS, Grade.A,
-            459_000, 799_000, 8, "SNYWH-55410", 12, "Ninguno",
-            "Producto nuevo de saldo · empaque original",
-            "Cancelación activa de ruido y 30 h de batería.", s, ProductStatus.PUBLISHED, rating = 4.8)
-        products += Product(8, "Reloj inteligente 44 mm", "Xiaomi", Category.WEARABLES, Condition.USED, Grade.B,
-            219_000, 399_000, 2, "XMW44-12093", 3, "Correa con desgaste",
-            "Sensores y batería probados",
-            "Reloj usado con cargador original.", s, ProductStatus.PUBLISHED, rating = 4.2)
-        products += Product(9, "Celular 256 GB 5G, azul", "Motorola", Category.PHONES, Condition.LIQUIDATION, Grade.B,
-            899_000, 1_590_000, 1, "359112045698771", 6, "Marco con golpe leve",
-            "Batería 93 % · 28 pruebas superadas",
-            "Unidad de lote de liquidación.", s, ProductStatus.REVIEW, rating = 4.5)
-        products += Product(10, "Tableta 8\" 32 GB", "Lenovo", Category.TABLETS, Condition.USED, Grade.C,
-            249_000, 459_000, 3, "LNVT8-00981", 3, "Pantalla con rayones visibles",
-            "Funcional · batería 80 %", "Tableta básica para niños.", 5, ProductStatus.REVIEW, rating = 4.0)
-
-        cart += CartItem(products[0], 1)
-        cart += CartItem(products[6], 1)
-
-        fun line(p: Product, q: Int) = OrderLine(p.id, p.title, p.category, p.grade, p.price, q, p.sellerId)
-        orders += Order("RS-2041", 1, listOf(line(products[3], 1)), SHIPPING_COST, OrderStatus.DELIVERED, "28/09/2026",
-            "Cra. 15 #93-40, Bogotá", "Tarjeta ****4242", "RS-PAY-551203", "Servientrega", "SV-77812033")
-        orders += Order("RS-2044", 6, listOf(line(products[1], 1)), SHIPPING_COST, OrderStatus.DELIVERED, "02/10/2026",
-            "Av. 68 #45-10, Bogotá", "PSE Bancolombia", "RS-PAY-551877", "Coordinadora", "CO-99120345")
-        orders += Order("RS-2046", 7, listOf(line(products[6], 2)), SHIPPING_COST, OrderStatus.SHIPPED, "08/10/2026",
-            "Cl. 140 #12-30, Bogotá", "Nequi", "RS-PAY-552301", "Interrapidísimo", "IR-55120987")
-        orders += Order("RS-2048", 1, listOf(line(products[0], 1), line(products[7], 1)), SHIPPING_COST, OrderStatus.PREPARING,
-            "15/10/2026", "Cra. 15 #93-40, Bogotá", "Tarjeta ****4242", "RS-PAY-552990")
-        orders += Order("RS-2049", 6, listOf(line(products[2], 1)), SHIPPING_COST, OrderStatus.PAID, "21/10/2026",
-            "Av. 68 #45-10, Bogotá", "Tarjeta ****1881", "RS-PAY-553120")
-        orders += Order("RS-2050", 7, listOf(line(products[5], 1)), SHIPPING_COST, OrderStatus.PAID, "26/10/2026",
-            "Cl. 140 #12-30, Bogotá", "PSE Davivienda", "RS-PAY-553402")
-
-        audit += AuditEvent("27/10/2026 22:14", "Sistema", "Webhook rechazado", "Firma inválida · 3 intentos", AuditType.SECURITY)
-        audit += AuditEvent("27/10/2026 23:02", "Sistema", "Cuenta bloqueada", "andres.p@correo.com · 5 intentos fallidos", AuditType.SECURITY)
-        audit += AuditEvent("28/10/2026 08:30", "Tecnosaldos Bogotá", "Creó producto", "Celular 256 GB 5G, azul", AuditType.CATALOG)
-        audit += AuditEvent("28/10/2026 09:12", "María Rojas", "Conciliación", "RS-2049 aprobado por pasarela", AuditType.PAYMENTS)
-        audit += AuditEvent("28/10/2026 10:45", "Celulares S.A.S.", "Registro de cuenta", "Rol Vendedor · Pendiente", AuditType.USERS)
-    }
 }

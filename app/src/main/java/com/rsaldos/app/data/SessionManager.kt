@@ -2,31 +2,32 @@ package com.rsaldos.app.data
 
 import android.content.Context
 
+/**
+ * Sesión local del usuario.
+ *
+ * La sesión real la mantiene Firebase Authentication; esta clase solo recuerda el último correo
+ * usado y da acceso al perfil cargado en [Repository]. Al cerrar sesión detiene los listeners
+ * de Firestore y desconecta Firebase.
+ */
 class SessionManager(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    var currentUserId: Int
-        get() = prefs.getInt(KEY_USER, -1)
-        set(value) = prefs.edit().putInt(KEY_USER, value).apply()
-
-    var biometricUserId: Int
-        get() = prefs.getInt(KEY_BIO_USER, -1)
-        set(value) = prefs.edit().putInt(KEY_BIO_USER, value).apply()
-
+    /** Último correo con el que se inició sesión (se precarga en el login). */
     var lastEmail: String
         get() = prefs.getString(KEY_EMAIL, "") ?: ""
         set(value) = prefs.edit().putString(KEY_EMAIL, value).apply()
 
-    fun currentUser(): User? = Repository.findUser(currentUserId)
+    /** Perfil del usuario autenticado o null si no hay sesión. */
+    fun currentUser(): User? = Repository.me
 
+    /** Cierra la sesión: detiene la sincronización y desconecta Firebase Authentication. */
     fun logout() {
-        prefs.edit().remove(KEY_USER).apply()
+        Repository.stop()
+        AuthService.signOut()
     }
 
     companion object {
         private const val PREFS = "rsaldos_session"
-        private const val KEY_USER = "user_id"
-        private const val KEY_BIO_USER = "bio_user_id"
         private const val KEY_EMAIL = "last_email"
     }
 }
